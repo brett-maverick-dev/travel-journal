@@ -150,7 +150,10 @@ export async function resetPassword(_prev, form) {
 
 /* ── profile ──────────────────────────────────────────────────────── */
 
-const PROFILE_FIELDS = ["name", "homeCity", "favoritePlace", "bio"];
+const PROFILE_FIELDS = [
+  "name", "homeCity", "favoritePlace", "bio",
+  "facebookUrl", "instagramUrl", "tiktokUrl", "xUrl", "youtubeUrl", "pinterestUrl"
+];
 
 export async function updateProfile(field, value) {
   const user = await requireUser();

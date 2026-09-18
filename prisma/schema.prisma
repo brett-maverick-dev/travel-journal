@@ -24,6 +24,12 @@ model User {
   homeCity      String   @default("")
   favoritePlace String   @default("")
   bio           String   @default("")
+  facebookUrl   String   @default("")
+  instagramUrl  String   @default("")
+  tiktokUrl     String   @default("")
+  xUrl          String   @default("")
+  youtubeUrl    String   @default("")
+  pinterestUrl  String   @default("")
   createdAt     DateTime @default(now())
   trips         Trip[]
 }

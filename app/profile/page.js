@@ -7,6 +7,15 @@ import { currentUser } from "@/lib/session";
 import { updateProfile } from "@/app/actions";
 import { fmt } from "@/lib/format";
 
+const SOCIALS = [
+  { field: "facebookUrl", icon: "ph-facebook-logo", label: "Facebook", placeholder: "https://facebook.com/yourname" },
+  { field: "instagramUrl", icon: "ph-instagram-logo", label: "Instagram", placeholder: "https://instagram.com/yourhandle" },
+  { field: "tiktokUrl", icon: "ph-tiktok-logo", label: "TikTok", placeholder: "https://tiktok.com/@yourhandle" },
+  { field: "xUrl", icon: "ph-x-logo", label: "X", placeholder: "https://x.com/yourhandle" },
+  { field: "youtubeUrl", icon: "ph-youtube-logo", label: "YouTube", placeholder: "https://youtube.com/@yourchannel" },
+  { field: "pinterestUrl", icon: "ph-pinterest-logo", label: "Pinterest", placeholder: "https://pinterest.com/yourhandle" }
+];
+
 export default async function Profile() {
   const user = await currentUser();
   if (!user) redirect("/signin");
@@ -55,6 +64,22 @@ export default async function Profile() {
             <label>About</label>
             <Field as="textarea" value={user.bio} placeholder="A little about you and how you travel…"
               save={updateProfile.bind(null, "bio")} rows={4} />
+          </div>
+
+          <div style={{ height: 1, background: "var(--color-divider)" }} />
+
+          <div>
+            <h6 className="text-muted" style={{ margin: "0 0 10px" }}>Social profiles</h6>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+              {SOCIALS.map((s) => (
+                <div key={s.field} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <i className={"ph " + s.icon} title={s.label}
+                    style={{ fontSize: 18, width: 20, textAlign: "center", color: "var(--color-accent)", flexShrink: 0 }} />
+                  <Field value={user[s.field]} placeholder={s.placeholder}
+                    save={updateProfile.bind(null, s.field)} style={{ fontSize: 13, minHeight: 34, flex: 1 }} />
+                </div>
+              ))}
+            </div>
           </div>
 
           <div style={{ height: 1, background: "var(--color-divider)" }} />
