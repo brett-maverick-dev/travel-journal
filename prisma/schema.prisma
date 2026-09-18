@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // SQLite is fine for one instance with the file under public/assets (persistent
+  // on GoDaddy Node.js Hosting). Switch to "postgresql" for multiple instances.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  handle       String   @unique
+  passwordHash String
+  verified     Boolean  @default(false)
+  verifyCode   String?
+  codeExpires  DateTime?
+  createdAt    DateTime @default(now())
+  trips        Trip[]
+}
+
+model Trip {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  country      String        @default("")
+  visibility   String        @default("PRIVATE") // PRIVATE | PUBLIC
+  startDate    DateTime
+  endDate      DateTime
+  coverUrl     String?
+  createdAt    DateTime      @default(now())
+  destinations Destination[]
+  pages        Page[]
+
+  @@index([userId])
+}
+
+model Destination {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  name      String
+  lat       Float?
+  lng       Float?
+  arrive    DateTime
+  depart    DateTime
+  transport String   @default("Flight") // Flight | Train | Bus | Rental car | Ferry | On foot
+  detail    String   @default("")       // "NH106 · 11h 40m"
+  position  Int      @default(0)
+
+  @@index([tripId])
+}
+
+model Page {
+  id       String   @id @default(cuid())
+  tripId   String
+  trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  kind     String   @default("DAY") // DAY | ACTIVITY
+  parentId String?                 // set on ACTIVITY pages: the day they belong to
+  title    String   @default("Untitled page")
+  date     DateTime
+  time     String?                 // activity pages: "14:20"
+  place    String   @default("")
+  weather  String   @default("")
+  spend    String   @default("")
+  steps    String   @default("")
+  notes    String   @default("")
+  tags     String   @default("")   // comma separated
+  hidden   Boolean  @default(false)
+  position Int      @default(0)
+  photos   Photo[]
+
+  @@index([tripId])
+  @@index([parentId])
+}
+
+model Photo {
+  id       String  @id @default(cuid())
+  pageId   String
+  page     Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  url      String
+  caption  String  @default("")
+  position Int     @default(0)
+
+  @@index([pageId])
+}

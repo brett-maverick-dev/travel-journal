@@ -1,0 +1,33 @@
+{
+  "name": "meridian-journal",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "node scripts/normalize-routes.mjs",
+    "routes": "node scripts/normalize-routes.mjs",
+    "dev": "node scripts/normalize-routes.mjs && next dev",
+    "build": "node scripts/normalize-routes.mjs && prisma generate && next build",
+    "start": "node server.mjs",
+    "migrate": "prisma migrate dev --name init",
+    "seed": "node prisma/seed.mjs",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
+  },
+  "dependencies": {
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "@prisma/client": "6.3.1",
+    "bcryptjs": "2.4.3",
+    "jose": "5.9.6",
+    "@phosphor-icons/web": "2.1.1",
+    "prisma": "6.3.1"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "main": "server.mjs",
+  "type": "module"
+}

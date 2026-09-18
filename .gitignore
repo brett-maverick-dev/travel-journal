@@ -1,0 +1,12 @@
+# Never commit these — the host rejects uploads containing node_modules
+node_modules
+.next
+.env
+*.db
+*.db-journal
+
+# Runtime data lives in the host's persistent directory, not in git
+public/assets/uploads/*
+!public/assets/uploads/.gitkeep
+public/assets/data/*
+!public/assets/data/.gitkeep
