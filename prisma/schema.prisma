@@ -17,6 +17,8 @@ model User {
   verified     Boolean  @default(false)
   verifyCode   String?
   codeExpires  DateTime?
+  resetCode    String?
+  resetExpires DateTime?
   createdAt    DateTime @default(now())
   trips        Trip[]
 }

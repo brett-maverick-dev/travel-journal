@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { createSession, destroySession, currentUser, requireUser } from "@/lib/session";
-import { sendVerificationCode } from "@/lib/mail";
+import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
 import { saveUpload } from "@/lib/storage";
 import { geocode } from "@/lib/geo";
 
@@ -114,6 +114,38 @@ export async function signIn(_prev, form) {
 export async function signOut() {
   await destroySession();
   redirect("/signin");
+}
+
+export async function requestPasswordReset(_prev, form) {
+  const email = String(form.get("email") || "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Enter a valid email address." };
+
+  // Only verified accounts get a code, but redirect the same way either way
+  // so this can't be used to probe which emails have an account.
+  const user = await db.user.findUnique({ where: { email } });
+  if (user && user.verified) {
+    const resetCode = code6();
+    const resetExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await db.user.update({ where: { id: user.id }, data: { resetCode, resetExpires } });
+    await sendPasswordReset(email, resetCode);
+  }
+  redirect("/reset-password?email=" + encodeURIComponent(email));
+}
+
+export async function resetPassword(_prev, form) {
+  const email = String(form.get("email") || "").trim().toLowerCase();
+  const code = String(form.get("code") || "").trim();
+  const password = String(form.get("password") || "");
+  if (password.length < 10) return { error: "Use at least 10 characters." };
+
+  const user = await db.user.findUnique({ where: { email } });
+  if (!user || !user.resetCode || user.resetCode !== code) return { error: "That code does not match." };
+  if (user.resetExpires && user.resetExpires < new Date()) return { error: "That code has expired. Request a new one." };
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await db.user.update({ where: { id: user.id }, data: { passwordHash, resetCode: null, resetExpires: null } });
+  await createSession(user.id);
+  redirect("/trips");
 }
 
 /* ── trips ────────────────────────────────────────────────────────── */
