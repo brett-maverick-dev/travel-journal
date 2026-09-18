@@ -319,6 +319,11 @@ a:hover { color: var(--color-accent-300); }
 .leaflet-popup-close-button:hover { color: var(--color-text) !important; background: transparent !important; }
 .tm-far .tm-lbl { display: none; }
 
+/* Leaflet assigns its panes z-index 400-700 and its controls 800. Isolating the
+   map keeps those from outranking dialogs and the sticky header. */
+.leaflet-container { isolation: isolate; z-index: 0; }
+.dialog-backdrop { z-index: 2000; }
+
 .trip-card { cursor: pointer; transition: box-shadow .16s ease, transform .16s ease; }
 .trip-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .trip-card[data-sel="1"] { box-shadow: inset 0 0 0 1px var(--color-accent), var(--shadow-sm); }
@@ -339,8 +344,3 @@ a:hover { color: var(--color-accent-300); }
   .split { grid-template-columns: minmax(0, 1fr) !important; }
   .spine { position: static !important; }
 }
-
-/* Leaflet panes are z-index 400-700 and its controls 800; isolate the map so
-   dialogs and the sticky header outrank it. */
-.leaflet-container { isolation: isolate; z-index: 0; }
-.dialog-backdrop { z-index: 2000; }

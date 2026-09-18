@@ -40,6 +40,11 @@ automatically on `npm install`. If you copied the files around by hand and get 4
 on trip pages, run `npm run routes` once. It is idempotent, and you can delete the
 script after the first run.
 
+It is idempotent and never fails the install: if `app/trips/[id]/` is already there
+(because a previous run committed it), the leftover `-id-` copy is deleted instead.
+Once your repository contains only the bracketed folders you can drop the script and
+its `postinstall` entry entirely.
+
 Sign up with any email. In dev there is no SMTP configured, so the six-digit
 confirmation code is **printed to the server console** (and returned by the action in
 development so the verify screen can show it).
