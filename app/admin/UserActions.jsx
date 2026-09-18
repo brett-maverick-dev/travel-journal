@@ -8,9 +8,13 @@ export default function UserActions({ userId, verified, isAdmin, isSelf }) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, opacity: pending ? 0.5 : 1 }}>
-      <button className={"tag " + (verified ? "tag-accent" : "tag-neutral")} disabled={pending}
-        onClick={() => start(() => adminSetVerified(userId, !verified))}
-        title="Toggle verified" style={{ cursor: "pointer", border: 0 }}>
+      <button className={"tag " + (verified ? "tag-accent" : "tag-neutral")} disabled={pending || (isSelf && verified)}
+        onClick={() => start(async () => {
+          const res = await adminSetVerified(userId, !verified);
+          if (res?.error) alert(res.error);
+        })}
+        title={isSelf && verified ? "You can't unverify your own account" : "Toggle verified"}
+        style={{ cursor: isSelf && verified ? "not-allowed" : "pointer", border: 0, opacity: isSelf && verified ? 0.5 : 1 }}>
         {verified ? "Verified" : "Unverified"}
       </button>
       <button className={"tag " + (isAdmin ? "tag-accent-2" : "tag-neutral")} disabled={pending || isSelf}

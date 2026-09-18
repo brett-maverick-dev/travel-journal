@@ -420,9 +420,11 @@ export async function deletePhoto(id) {
 /* ── admin ────────────────────────────────────────────────────────── */
 
 export async function adminSetVerified(userId, verified) {
-  await assertAdmin();
+  const me = await assertAdmin();
+  if (userId === me.id && !verified) return { error: "You can't unverify your own account — that would lock you out." };
   await db.user.update({ where: { id: userId }, data: { verified: Boolean(verified) } });
   revalidatePath("/admin");
+  return { ok: true };
 }
 
 export async function adminSetAdmin(userId, admin) {
