@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { createSession, destroySession, currentUser, requireUser } from "@/lib/session";
+import { createSession, destroySession, currentUser, requireUser, isAdminUser } from "@/lib/session";
 import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
 import { saveUpload } from "@/lib/storage";
 import { geocode } from "@/lib/geo";
@@ -23,6 +23,12 @@ async function assertOwner(tripId) {
   const trip = await db.trip.findUnique({ where: { id: tripId } });
   if (!trip || trip.userId !== user.id) throw new Error("FORBIDDEN");
   return trip;
+}
+
+async function assertAdmin() {
+  const user = await requireUser();
+  if (!isAdminUser(user)) throw new Error("FORBIDDEN");
+  return user;
 }
 
 const MAX_DAY_PAGES = 60; // guards against a mistyped end date generating years of pages
@@ -409,4 +415,28 @@ export async function deletePhoto(id) {
   await assertOwner(photo.page.tripId);
   await db.photo.delete({ where: { id } });
   revalidatePath("/trips/" + photo.page.tripId);
+}
+
+/* ── admin ────────────────────────────────────────────────────────── */
+
+export async function adminSetVerified(userId, verified) {
+  await assertAdmin();
+  await db.user.update({ where: { id: userId }, data: { verified: Boolean(verified) } });
+  revalidatePath("/admin");
+}
+
+export async function adminSetAdmin(userId, admin) {
+  const me = await assertAdmin();
+  if (userId === me.id) return { error: "You can't change your own admin status." };
+  await db.user.update({ where: { id: userId }, data: { isAdmin: Boolean(admin) } });
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function adminDeleteUser(userId) {
+  const me = await assertAdmin();
+  if (userId === me.id) return { error: "You can't delete your own account here." };
+  await db.user.delete({ where: { id: userId } });
+  revalidatePath("/admin");
+  return { ok: true };
 }

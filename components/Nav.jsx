@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signOut } from "@/app/actions";
+import { isAdminUser } from "@/lib/session";
 
 export default function Nav({ user, active }) {
   const email = user?.email || "";
@@ -22,6 +23,9 @@ export default function Nav({ user, active }) {
       <Link href="/trips" aria-current={active === "trips" ? "page" : undefined}>Trips</Link>
       <Link href="/trips#map">Map</Link>
       <Link href="/profile" aria-current={active === "profile" ? "page" : undefined}>Profile</Link>
+      {isAdminUser(user) && (
+        <Link href="/admin" aria-current={active === "admin" ? "page" : undefined}>Admin</Link>
+      )}
       <form action={signOut}>
         <button className="btn btn-secondary" type="submit">Sign out</button>
       </form>

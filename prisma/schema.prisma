@@ -15,6 +15,7 @@ model User {
   handle        String   @unique
   passwordHash  String
   verified      Boolean  @default(false)
+  isAdmin       Boolean  @default(false)
   verifyCode    String?
   codeExpires   DateTime?
   resetCode     String?
