@@ -23,7 +23,7 @@ export default async function ActivityPage({ params }) {
 
   return (
     <>
-      <Nav email={user.email} active="trips" />
+      <Nav user={user} active="trips" />
       <div className="page-shell" style={{ maxWidth: 900 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
           <Link href={"/trips/" + id + (parent ? "#page-" + parent.id : "")} className="btn btn-ghost">

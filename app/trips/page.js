@@ -35,7 +35,7 @@ export default async function Trips() {
 
   return (
     <>
-      <Nav email={user.email} active="trips" />
+      <Nav user={user} active="trips" />
       <TripBrowser trips={trips} />
     </>
   );

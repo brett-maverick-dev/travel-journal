@@ -148,6 +148,44 @@ export async function resetPassword(_prev, form) {
   redirect("/trips");
 }
 
+/* ── profile ──────────────────────────────────────────────────────── */
+
+const PROFILE_FIELDS = ["name", "homeCity", "favoritePlace", "bio"];
+
+export async function updateProfile(field, value) {
+  const user = await requireUser();
+  if (!PROFILE_FIELDS.includes(field)) throw new Error("BAD_FIELD");
+  await db.user.update({ where: { id: user.id }, data: { [field]: String(value) } });
+  revalidatePath("/profile");
+}
+
+export async function updateHandle(handle) {
+  const user = await requireUser();
+  const clean = String(handle || "").trim().toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  if (clean.length < 3) return { error: "Needs at least 3 characters." };
+  if (clean.length > 30) return { error: "Keep it under 30 characters." };
+
+  const existing = await db.user.findUnique({ where: { handle: clean } });
+  if (existing && existing.id !== user.id) return { error: "That username is taken." };
+
+  await db.user.update({ where: { id: user.id }, data: { handle: clean } });
+  revalidatePath("/profile");
+  revalidatePath("/trips");
+  return { ok: true, handle: clean };
+}
+
+export async function setAvatar(_prev, form) {
+  const user = await requireUser();
+  const file = form.get("avatar");
+  if (!file || typeof file.arrayBuffer !== "function" || !file.size) return { error: "Choose an image." };
+  const url = await saveUpload(file);
+  await db.user.update({ where: { id: user.id }, data: { avatarUrl: url } });
+  revalidatePath("/profile");
+  revalidatePath("/trips");
+  return { ok: true };
+}
+
 /* ── trips ────────────────────────────────────────────────────────── */
 
 export async function createTrip(_prev, form) {

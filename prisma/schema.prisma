@@ -10,17 +10,22 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  handle       String   @unique
-  passwordHash String
-  verified     Boolean  @default(false)
-  verifyCode   String?
-  codeExpires  DateTime?
-  resetCode    String?
-  resetExpires DateTime?
-  createdAt    DateTime @default(now())
-  trips        Trip[]
+  id            String   @id @default(cuid())
+  email         String   @unique
+  handle        String   @unique
+  passwordHash  String
+  verified      Boolean  @default(false)
+  verifyCode    String?
+  codeExpires   DateTime?
+  resetCode     String?
+  resetExpires  DateTime?
+  name          String   @default("")
+  avatarUrl     String?
+  homeCity      String   @default("")
+  favoritePlace String   @default("")
+  bio           String   @default("")
+  createdAt     DateTime @default(now())
+  trips         Trip[]
 }
 
 model Trip {

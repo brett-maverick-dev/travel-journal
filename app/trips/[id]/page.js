@@ -38,7 +38,7 @@ export default async function TripPage({ params }) {
 
   return (
     <>
-      <Nav email={user.email} active="trips" />
+      <Nav user={user} active="trips" />
 
       <div style={{ position: "relative", height: 340, overflow: "hidden", background: "var(--color-neutral-900)" }}>
         {trip.coverUrl

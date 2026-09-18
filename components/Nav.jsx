@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { signOut } from "@/app/actions";
 
-export default function Nav({ email, active }) {
+export default function Nav({ user, active }) {
+  const email = user?.email || "";
+  const avatarUrl = user?.avatarUrl;
   return (
     <div className="nav" style={{
       padding: "14px 34px", position: "sticky", top: 0, zIndex: 20,
@@ -19,13 +21,18 @@ export default function Nav({ email, active }) {
       </Link>
       <Link href="/trips" aria-current={active === "trips" ? "page" : undefined}>Trips</Link>
       <Link href="/trips#map">Map</Link>
+      <Link href="/profile" aria-current={active === "profile" ? "page" : undefined}>Profile</Link>
       <form action={signOut}>
         <button className="btn btn-secondary" type="submit">Sign out</button>
       </form>
-      <span title={email} style={{
-        width: 30, height: 30, borderRadius: "50%", display: "grid", placeItems: "center",
+      <Link href="/profile" title={email} style={{
+        width: 30, height: 30, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center",
         fontSize: 11, background: "var(--color-accent-800)", color: "var(--color-accent-100)"
-      }}>{(email || "me").slice(0, 2).toUpperCase()}</span>
+      }}>
+        {avatarUrl
+          ? <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          : (email || "me").slice(0, 2).toUpperCase()}
+      </Link>
     </div>
   );
 }
