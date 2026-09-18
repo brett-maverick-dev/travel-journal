@@ -131,7 +131,7 @@ export default function TripMap({ trips, height = 420, only = false, hoverId = "
   }, [hoverId]);
 
   return (
-    <div style={{ position: "relative", height, borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}>
+    <div style={{ position: "relative", height, borderRadius: "var(--radius-md)", overflow: "hidden", boxShadow: "var(--shadow-sm)", zIndex: 0, isolation: "isolate" }}>
       <div ref={host} style={{ position: "absolute", inset: 0 }} />
     </div>
   );

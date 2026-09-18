@@ -15,7 +15,7 @@ export default function NewTripDialog() {
         <i className="ph ph-plus" />New trip
       </button>
       {open && (
-        <div className="dialog-backdrop" style={{ zIndex: 40 }} onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+        <div className="dialog-backdrop" style={{ zIndex: 2000 }} onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
           <form className="dialog" action={action} style={{ width: "min(620px, 100%)", maxHeight: "88vh", overflow: "auto" }}>
             <div className="dialog-title">New trip</div>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 130px 130px", gap: 10 }}>

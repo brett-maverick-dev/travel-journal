@@ -339,3 +339,8 @@ a:hover { color: var(--color-accent-300); }
   .split { grid-template-columns: minmax(0, 1fr) !important; }
   .spine { position: static !important; }
 }
+
+/* Leaflet panes are z-index 400-700 and its controls 800; isolate the map so
+   dialogs and the sticky header outrank it. */
+.leaflet-container { isolation: isolate; z-index: 0; }
+.dialog-backdrop { z-index: 2000; }
