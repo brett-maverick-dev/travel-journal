@@ -25,6 +25,26 @@ async function assertOwner(tripId) {
   return trip;
 }
 
+const MAX_DAY_PAGES = 60; // guards against a mistyped end date generating years of pages
+
+function eachDay(start, end) {
+  const days = [];
+  let t = new Date(start);
+  const last = new Date(end);
+  while (t <= last && days.length < MAX_DAY_PAGES) {
+    days.push(t);
+    t = new Date(t.getTime() + 86400000);
+  }
+  return days.length ? days : [new Date(start)];
+}
+
+// Which destination's arrive/depart window a given day falls in — ties (a
+// changeover day) go to whichever destination comes first in the route.
+function placeForDate(destinations, date) {
+  const hit = destinations.find((d) => d.arrive <= date && date <= d.depart);
+  return hit?.name || destinations[destinations.length - 1]?.name || "";
+}
+
 /* ── auth ─────────────────────────────────────────────────────────── */
 
 export async function signUp(_prev, form) {
@@ -97,22 +117,32 @@ export async function createTrip(_prev, form) {
     data: { userId: user.id, name, startDate, endDate, visibility, country: places[0] || "" }
   });
 
+  const destinations = [];
   for (let i = 0; i < places.length; i++) {
     const coords = await geocode(places[i]);
     const arrive = new Date(arrivals[i] || startDate);
+    const depart = new Date(arrivals[i + 1] || endDate);
     await db.destination.create({
       data: {
         tripId: trip.id, name: places[i], position: i,
-        arrive, depart: new Date(arrivals[i + 1] || endDate),
+        arrive, depart,
         transport: transports[i] || "Flight", detail: "Not booked yet",
         lat: coords?.lat ?? null, lng: coords?.lng ?? null
       }
     });
+    destinations.push({ name: places[i], arrive, depart });
   }
 
-  await db.page.create({
-    data: { tripId: trip.id, kind: "DAY", title: "Day one", date: startDate, place: places[0] || "", position: 0 }
-  });
+  const days = eachDay(startDate, endDate);
+  for (let i = 0; i < days.length; i++) {
+    await db.page.create({
+      data: {
+        tripId: trip.id, kind: "DAY", position: i,
+        title: i === 0 ? "Day one" : "Day " + (i + 1),
+        date: days[i], place: placeForDate(destinations, days[i])
+      }
+    });
+  }
 
   revalidatePath("/trips");
   redirect("/trips/" + trip.id);
@@ -191,17 +221,18 @@ export async function deleteDestination(id) {
 
 export async function addDayPage(tripId) {
   const trip = await assertOwner(tripId);
-  const count = await db.page.count({ where: { tripId, kind: "DAY" } });
-  const destinations = await db.destination.findMany({ where: { tripId }, orderBy: { position: "asc" } });
+  const [lastPage, position, destinations] = await Promise.all([
+    db.page.findFirst({ where: { tripId, kind: "DAY" }, orderBy: { date: "desc" } }),
+    db.page.count({ where: { tripId, kind: "DAY" } }),
+    db.destination.findMany({ where: { tripId }, orderBy: { position: "asc" } })
+  ]);
 
-  let date = new Date(trip.startDate.getTime() + count * 86400000);
-  if (date > trip.endDate) date = trip.endDate;
-
-  const active = destinations.find((d) => d.arrive <= date && date <= d.depart);
-  const place = active?.name || destinations[destinations.length - 1]?.name || trip.country || "";
+  // Always the day after whatever's currently last, so repeat clicks never land on a date that's taken.
+  const date = lastPage ? new Date(lastPage.date.getTime() + 86400000) : new Date(trip.startDate);
+  const place = placeForDate(destinations, date) || trip.country || "";
 
   const page = await db.page.create({
-    data: { tripId, kind: "DAY", position: count, title: "Untitled page", date, place }
+    data: { tripId, kind: "DAY", position, title: "Untitled page", date, place }
   });
   revalidatePath("/trips/" + tripId);
   return page.id;
