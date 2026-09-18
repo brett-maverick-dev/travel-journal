@@ -127,10 +127,10 @@ export default async function TripPage({ params }) {
                 <div className="text-muted" style={{ fontSize: 11 }}>
                   {[p.weather, p.spend, p.steps].filter(Boolean).join("  ·  ")}
                 </div>
-                <DeletePageButton pageId={p.id} confirmLabel={'"' + p.title + '"'} compact
+                <DeletePageButton pageId={p.id} confirmLabel={p.title ? '"' + p.title + '"' : "this page"} compact
                   style={{ marginLeft: "auto" }} />
               </div>
-              <Field value={p.title} save={updatePage.bind(null, p.id, "title")}
+              <Field value={p.title} placeholder="Give this day a title" save={updatePage.bind(null, p.id, "title")}
                 style={{ border: 0, background: "transparent", padding: 0, fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 31, minHeight: "auto", letterSpacing: "-0.015em", margin: "6px 0 14px" }} />
               <Field as="textarea" value={p.notes} save={updatePage.bind(null, p.id, "notes")}
                 placeholder="What happened today?"

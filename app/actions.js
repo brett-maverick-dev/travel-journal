@@ -27,22 +27,38 @@ async function assertOwner(tripId) {
 
 const MAX_DAY_PAGES = 60; // guards against a mistyped end date generating years of pages
 
-function eachDay(start, end) {
-  const days = [];
-  let t = new Date(start);
-  const last = new Date(end);
-  while (t <= last && days.length < MAX_DAY_PAGES) {
-    days.push(t);
-    t = new Date(t.getTime() + 86400000);
-  }
-  return days.length ? days : [new Date(start)];
-}
-
-// Which destination's arrive/depart window a given day falls in — ties (a
-// changeover day) go to whichever destination comes first in the route.
+// Which destination's arrive/depart window a given day falls in — used to default
+// a single new page (e.g. the manual "Add a page" button) to the right city.
 function placeForDate(destinations, date) {
   const hit = destinations.find((d) => d.arrive <= date && date <= d.depart);
   return hit?.name || destinations[destinations.length - 1]?.name || "";
+}
+
+// One page per calendar day across a whole itinerary of segments (destinations).
+// - Each segment gets a page for every day it spans.
+// - A segment whose start and end date match (a day trip) always gets its own
+//   page, even when that date is also a neighboring segment's travel day.
+// - Otherwise, where two segments' ranges touch (the travel day between them),
+//   that day is only ever handed out once — to whichever segment comes first.
+function buildDayPages(destinations) {
+  const claimed = new Map(); // date (ms) -> place name
+
+  for (const seg of destinations) {
+    if (seg.arrive.getTime() === seg.depart.getTime()) claimed.set(seg.arrive.getTime(), seg.name);
+  }
+  for (const seg of destinations) {
+    if (seg.arrive.getTime() === seg.depart.getTime()) continue;
+    let t = seg.arrive.getTime();
+    const end = seg.depart.getTime();
+    for (let n = 0; t <= end && n < MAX_DAY_PAGES; t += 86400000, n++) {
+      if (!claimed.has(t)) claimed.set(t, seg.name);
+    }
+  }
+
+  return [...claimed.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .slice(0, MAX_DAY_PAGES)
+    .map(([t, place]) => ({ date: new Date(t), place }));
 }
 
 /* ── auth ─────────────────────────────────────────────────────────── */
@@ -133,14 +149,10 @@ export async function createTrip(_prev, form) {
     destinations.push({ name: places[i], arrive, depart });
   }
 
-  const days = eachDay(startDate, endDate);
+  const days = buildDayPages(destinations);
   for (let i = 0; i < days.length; i++) {
     await db.page.create({
-      data: {
-        tripId: trip.id, kind: "DAY", position: i,
-        title: i === 0 ? "Day one" : "Day " + (i + 1),
-        date: days[i], place: placeForDate(destinations, days[i])
-      }
+      data: { tripId: trip.id, kind: "DAY", position: i, title: "", date: days[i].date, place: days[i].place }
     });
   }
 
@@ -232,7 +244,7 @@ export async function addDayPage(tripId) {
   const place = placeForDate(destinations, date) || trip.country || "";
 
   const page = await db.page.create({
-    data: { tripId, kind: "DAY", position, title: "Untitled page", date, place }
+    data: { tripId, kind: "DAY", position, title: "", date, place }
   });
   revalidatePath("/trips/" + tripId);
   return page.id;

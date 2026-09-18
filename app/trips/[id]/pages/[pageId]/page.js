@@ -29,7 +29,7 @@ export default async function ActivityPage({ params }) {
           <Link href={"/trips/" + id + (parent ? "#page-" + parent.id : "")} className="btn btn-ghost">
             <i className="ph ph-arrow-left" />{parent ? parent.title : "Back to trip"}
           </Link>
-          <DeletePageButton pageId={page.id} confirmLabel={'"' + page.title + '"'} />
+          <DeletePageButton pageId={page.id} confirmLabel={page.title ? '"' + page.title + '"' : "this page"} />
         </div>
 
         <div className="card-kicker">Activity page · {page.trip.name}</div>
