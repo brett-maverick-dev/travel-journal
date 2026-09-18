@@ -8,10 +8,11 @@ import VisibilityToggle from "./VisibilityToggle";
 import CoverUpload from "./CoverUpload";
 import AddButton from "./AddButton";
 import DeleteTripButton from "./DeleteTripButton";
+import DeletePageButton from "@/components/DeletePageButton";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage } from "@/app/actions";
-import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON } from "@/lib/format";
+import { fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON } from "@/lib/format";
 
 export default async function TripPage({ params }) {
   const { id } = await params;
@@ -118,11 +119,16 @@ export default async function TripPage({ params }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 52 }}>
           {days.map((p) => (
             <div key={p.id} id={"page-" + p.id} style={{ scrollMarginTop: 96 }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-                <div className="card-kicker">{fmt(p.date)}{p.place ? " · " + p.place : ""}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <Field type="date" value={inputDate(p.date)} save={updatePage.bind(null, p.id, "date")}
+                  style={{ fontSize: 11, minHeight: 28, padding: "3px 6px", width: 132 }} />
+                <Field value={p.place} placeholder="Place" save={updatePage.bind(null, p.id, "place")}
+                  style={{ fontSize: 11, minHeight: 28, padding: "3px 6px", width: 150 }} />
                 <div className="text-muted" style={{ fontSize: 11 }}>
                   {[p.weather, p.spend, p.steps].filter(Boolean).join("  ·  ")}
                 </div>
+                <DeletePageButton pageId={p.id} confirmLabel={'"' + p.title + '"'} compact
+                  style={{ marginLeft: "auto" }} />
               </div>
               <Field value={p.title} save={updatePage.bind(null, p.id, "title")}
                 style={{ border: 0, background: "transparent", padding: 0, fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 31, minHeight: "auto", letterSpacing: "-0.015em", margin: "6px 0 14px" }} />
@@ -135,7 +141,6 @@ export default async function TripPage({ params }) {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 14 }}>
-                <Field value={p.place} placeholder="Place" save={updatePage.bind(null, p.id, "place")} style={{ fontSize: 12, minHeight: 32 }} />
                 <Field value={p.weather} placeholder="Weather" save={updatePage.bind(null, p.id, "weather")} style={{ fontSize: 12, minHeight: 32 }} />
                 <Field value={p.spend} placeholder="Spend" save={updatePage.bind(null, p.id, "spend")} style={{ fontSize: 12, minHeight: 32 }} />
                 <Field value={p.tags} placeholder="Tags, comma separated" save={updatePage.bind(null, p.id, "tags")} style={{ fontSize: 12, minHeight: 32 }} />

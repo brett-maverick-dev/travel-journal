@@ -3,11 +3,11 @@ import Link from "next/link";
 import Nav from "@/components/Nav";
 import Field from "@/components/Field";
 import Photos from "@/components/Photos";
-import DeletePageButton from "./DeletePageButton";
+import DeletePageButton from "@/components/DeletePageButton";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { updatePage } from "@/app/actions";
-import { fmt, tagList } from "@/lib/format";
+import { inputDate, tagList } from "@/lib/format";
 
 export default async function ActivityPage({ params }) {
   const { id, pageId } = await params;
@@ -29,7 +29,7 @@ export default async function ActivityPage({ params }) {
           <Link href={"/trips/" + id + (parent ? "#page-" + parent.id : "")} className="btn btn-ghost">
             <i className="ph ph-arrow-left" />{parent ? parent.title : "Back to trip"}
           </Link>
-          <DeletePageButton pageId={page.id} />
+          <DeletePageButton pageId={page.id} confirmLabel={'"' + page.title + '"'} />
         </div>
 
         <div className="card-kicker">Activity page · {page.trip.name}</div>
@@ -38,7 +38,7 @@ export default async function ActivityPage({ params }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20, maxWidth: 520 }}>
           <Field value={page.time || ""} placeholder="Time" save={updatePage.bind(null, page.id, "time")} style={{ fontSize: 12, minHeight: 32, width: 110 }} />
           <Field value={page.place} placeholder="Place" save={updatePage.bind(null, page.id, "place")} style={{ fontSize: 12, minHeight: 32, width: 180 }} />
-          <span className="text-muted" style={{ fontSize: 12, alignSelf: "center" }}>{fmt(page.date)}</span>
+          <Field type="date" value={inputDate(page.date)} save={updatePage.bind(null, page.id, "date")} style={{ fontSize: 12, minHeight: 32, width: 150 }} />
         </div>
 
         <Photos pageId={page.id} photos={page.photos} canEdit />

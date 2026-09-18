@@ -192,12 +192,16 @@ export async function deleteDestination(id) {
 export async function addDayPage(tripId) {
   const trip = await assertOwner(tripId);
   const count = await db.page.count({ where: { tripId, kind: "DAY" } });
-  const last = await db.destination.findFirst({ where: { tripId }, orderBy: { position: "desc" } });
+  const destinations = await db.destination.findMany({ where: { tripId }, orderBy: { position: "asc" } });
+
+  let date = new Date(trip.startDate.getTime() + count * 86400000);
+  if (date > trip.endDate) date = trip.endDate;
+
+  const active = destinations.find((d) => d.arrive <= date && date <= d.depart);
+  const place = active?.name || destinations[destinations.length - 1]?.name || trip.country || "";
+
   const page = await db.page.create({
-    data: {
-      tripId, kind: "DAY", position: count, title: "Untitled page",
-      date: new Date(trip.startDate.getTime() + count * 86400000), place: last?.name || ""
-    }
+    data: { tripId, kind: "DAY", position: count, title: "Untitled page", date, place }
   });
   revalidatePath("/trips/" + tripId);
   return page.id;
