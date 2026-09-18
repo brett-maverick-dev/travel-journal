@@ -131,6 +131,11 @@ export async function updateTrip(tripId, data) {
   revalidatePath("/trips/" + tripId);
 }
 
+export async function renameTrip(tripId, name) {
+  const clean = String(name || "").trim() || "Untitled trip";
+  await updateTrip(tripId, { name: clean });
+}
+
 export async function deleteTrip(tripId) {
   await assertOwner(tripId);
   await db.trip.delete({ where: { id: tripId } });

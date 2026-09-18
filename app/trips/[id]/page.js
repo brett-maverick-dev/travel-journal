@@ -7,9 +7,10 @@ import Photos from "@/components/Photos";
 import VisibilityToggle from "./VisibilityToggle";
 import CoverUpload from "./CoverUpload";
 import AddButton from "./AddButton";
+import DeleteTripButton from "./DeleteTripButton";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { updateDestination, updatePage, addDestination, addDayPage, addActivityPage } from "@/app/actions";
+import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage } from "@/app/actions";
 import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON } from "@/lib/format";
 
 export default async function TripPage({ params }) {
@@ -48,11 +49,14 @@ export default async function TripPage({ params }) {
             <i className="ph ph-arrow-left" />All trips
           </Link>
           <CoverUpload tripId={trip.id} hasCover={Boolean(trip.coverUrl)} />
+          <DeleteTripButton tripId={trip.id} tripName={trip.name}
+            style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }} />
         </div>
         <div style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", gap: 26, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 420px", minWidth: 0 }}>
             <div className="card-kicker">{trip.country || trip.destinations[0]?.name}</div>
-            <h1 style={{ margin: "4px 0 6px", fontSize: 46 }}>{trip.name}</h1>
+            <Field value={trip.name} save={renameTrip.bind(null, trip.id)}
+              style={{ border: 0, background: "transparent", padding: 0, margin: "4px 0 6px", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 46, minHeight: "auto", letterSpacing: "-0.015em", width: "100%" }} />
             <div className="text-muted" style={{ fontSize: 14 }}>
               {fmtRange(trip.startDate, trip.endDate)} · {trip.destinations.length} destinations · {trip.pages.length} pages
             </div>
