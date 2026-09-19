@@ -8,6 +8,7 @@ import { createSession, destroySession, currentUser, requireUser, isAdminUser } 
 import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
 import { saveUpload } from "@/lib/storage";
 import { geocode } from "@/lib/geo";
+import { snapshotDatabase } from "@/lib/backup";
 
 const code6 = () => String(Math.floor(100000 + Math.random() * 900000));
 
@@ -441,4 +442,11 @@ export async function adminDeleteUser(userId) {
   await db.user.delete({ where: { id: userId } });
   revalidatePath("/admin");
   return { ok: true };
+}
+
+export async function adminCreateBackup() {
+  await assertAdmin();
+  const file = await snapshotDatabase();
+  revalidatePath("/admin/backups");
+  return { ok: true, file };
 }

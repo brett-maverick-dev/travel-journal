@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import Nav from "@/components/Nav";
 import UserActions from "./UserActions";
 import { currentUser, isAdminUser } from "@/lib/session";
@@ -29,6 +30,11 @@ export default async function Admin({ searchParams }) {
     <>
       <Nav user={user} active="admin" />
       <div className="page-shell" style={{ paddingTop: 34 }}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+          <Link href="/admin">Users</Link>
+          <Link href="/admin/backups" className="text-muted">Backups</Link>
+        </div>
+
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 }}>
           <div>
             <h2 style={{ margin: "0 0 4px" }}>Users</h2>

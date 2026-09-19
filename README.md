@@ -81,17 +81,36 @@ Leave the root path in **General settings** as `/`. The site root renders the si
 screen directly and returns 200, so health checks never have to follow a redirect.
 `/api/health` is there if you would rather check a JSON endpoint.
 
-Two platform details the app is built around:
+Three platform details the app is built around:
 
 - **Persistence.** Only `/public/assets/` survives a redeploy, so both uploaded photos
   (`public/assets/uploads`) and the SQLite file (`public/assets/data/app.db`) live there.
   Write nothing you want to keep anywhere else in the project.
-- **No deploy shell.** `server.mjs` applies the database schema itself on boot —
-  `prisma migrate deploy` when migrations are committed, `prisma db push` on a fresh
-  clone that only has `schema.prisma`.
+- **No deploy shell.** `server.mjs` applies the database schema itself on boot, via
+  `prisma migrate deploy`. If it ever hits a database that already has these tables but
+  no migration history (e.g. one that predates migrations, built with `prisma db push`),
+  it self-baselines — marks the earliest committed migration as already applied, then
+  retries — so this needs no manual shell access. See "Changing the schema" below for
+  how to add a migration.
+- **Automatic backups.** `server.mjs` also takes a consistent snapshot of `app.db`
+  (SQLite `VACUUM INTO`, safe even while the app is live) on every boot and once a day
+  after that, keeping the 14 most recent under `public/assets/data/backups/`. An admin
+  can list, trigger, and download them from `/admin/backups`.
 
 If a deploy fails, **Runtime Logs** is the first place to look; the schema step logs the
 exact command it ran.
+
+### Changing the schema
+
+Migrations are committed to the repo (`prisma/migrations/`), not generated on the fly.
+After editing `prisma/schema.prisma`:
+
+```bash
+npx prisma migrate dev --name describe-the-change
+```
+
+This updates your local dev database and writes a new migration folder — commit it.
+`server.mjs` picks it up and applies it automatically on the next deploy.
 
 ### Any other Node host
 
@@ -109,7 +128,11 @@ PORT=8080 npm start
   one instance — SQLite does not survive concurrent writers across processes.
 - Replace `lib/storage.js` with S3/R2 presigned uploads if you scale past one instance;
   the rest of the app only consumes the URL it returns.
-- Set `SMTP_URL` and finish the one TODO in `lib/mail.js` so verification codes send.
+- Set `SMTP_URL` and `MAIL_FROM` so verification/reset codes email out instead of only
+  going to the runtime log — see the examples in `.env.example`.
+- Automatic backups only protect against database mistakes, not losing the whole
+  persistent volume — periodically download a snapshot from `/admin/backups` somewhere
+  off-server too.
 - Add rate limiting to `signUp` / `signIn` in `app/actions.js` before going public.
 
 ## Data model
