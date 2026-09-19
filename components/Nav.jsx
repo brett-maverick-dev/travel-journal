@@ -18,7 +18,7 @@ export default function Nav({ user, active }) {
           width: 8, height: 8, borderRadius: "50%", background: "var(--color-accent)",
           boxShadow: "0 0 10px var(--color-accent)"
         }} />
-        Meridian
+        Trekkster
       </Link>
       <Link href="/trips" aria-current={active === "trips" ? "page" : undefined}>Trips</Link>
       <Link href="/trips#map">Map</Link>

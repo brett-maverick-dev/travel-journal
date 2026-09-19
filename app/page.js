@@ -36,7 +36,7 @@ export default async function Home() {
       <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "64px 72px", maxWidth: 620 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 48 }}>
           <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--color-accent)", boxShadow: "0 0 12px var(--color-accent)" }} />
-          <span style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 17 }}>Meridian</span>
+          <span style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 17 }}>Trekkster</span>
         </div>
         <h1 style={{ fontSize: 44, margin: "0 0 14px", maxWidth: "11ch" }}>A journal that keeps its own map.</h1>
         <p className="text-muted" style={{ fontSize: 15, maxWidth: "44ch", marginBottom: 34 }}>

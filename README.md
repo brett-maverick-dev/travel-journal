@@ -1,4 +1,4 @@
-# Meridian Journal
+# Trekkster
 
 A live travel journal: trips with multiple dated destinations, a journal page per day,
 breakout pages for individual activities, photo uploads, per-trip privacy, and a home
@@ -49,7 +49,7 @@ Sign up with any email. In dev there is no SMTP configured, so the six-digit
 confirmation code is **printed to the server console** (and returned by the action in
 development so the verify screen can show it).
 
-Seeded account: `demo@meridian.app` / `travelwell` (already verified).
+Seeded account: `demo@trekkster.app` / `travelwell` (already verified).
 
 ## Deploy
 

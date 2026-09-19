@@ -20,7 +20,7 @@ export default function HandleField({ handle }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <span className="text-muted" style={{ fontSize: 13 }}>meridian.app/u/</span>
+        <span className="text-muted" style={{ fontSize: 13 }}>trekkster.app/u/</span>
         <input className="input" value={draft} disabled={pending}
           onChange={(e) => { setDraft(e.target.value); setError(""); }}
           onBlur={commit}

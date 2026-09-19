@@ -8,7 +8,7 @@ export default function SignIn() {
       <div style={{ width: "min(380px, 100%)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 28 }}>
           <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--color-accent)", boxShadow: "0 0 12px var(--color-accent)" }} />
-          <span style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 17 }}>Meridian</span>
+          <span style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 17 }}>Trekkster</span>
         </div>
         <h2 style={{ margin: "0 0 20px" }}>Welcome back</h2>
         <AuthForm action={signIn} submitLabel="Sign in">

@@ -31,10 +31,10 @@ function migrate() {
   const args = hasMigrations()
     ? ["prisma", "migrate", "deploy"]
     : ["prisma", "db", "push", "--skip-generate"];
-  console.log("[meridian] npx " + args.join(" "));
+  console.log("[trekkster] npx " + args.join(" "));
   const res = spawnSync("npx", args, { stdio: "inherit", shell: process.platform === "win32" });
   if (res.status !== 0) {
-    console.warn("[meridian] schema step failed — check DATABASE_URL in your app " +
+    console.warn("[trekkster] schema step failed — check DATABASE_URL in your app " +
       "secrets. Starting anyway so the runtime log is reachable.");
     return;
   }
@@ -50,5 +50,5 @@ const handle = app.getRequestHandler();
 
 await app.prepare();
 createServer((req, res) => handle(req, res)).listen(PORT, HOST, () => {
-  console.log("[meridian] listening on http://" + HOST + ":" + PORT);
+  console.log("[trekkster] listening on http://" + HOST + ":" + PORT);
 });

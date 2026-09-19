@@ -159,7 +159,7 @@ const TRIPS = [
 ];
 
 async function main() {
-  const email = "demo@meridian.app";
+  const email = "demo@trekkster.app";
   await db.user.deleteMany({ where: { email } });
   const user = await db.user.create({
     data: {

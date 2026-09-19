@@ -7,7 +7,7 @@ import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON } from "@/lib/format";
 export async function generateMetadata({ params }) {
   const { tripId } = await params;
   const trip = await db.trip.findUnique({ where: { id: tripId } });
-  return { title: trip && trip.visibility === "PUBLIC" ? trip.name + " — Meridian" : "Meridian" };
+  return { title: trip && trip.visibility === "PUBLIC" ? trip.name + " — Trekkster" : "Trekkster" };
 }
 
 // Read-only public view. Private trips 404 here, and pages flagged hidden are
@@ -103,7 +103,7 @@ export default async function PublicTrip({ params }) {
             );
           })}
           <p className="text-muted" style={{ fontSize: 12 }}>
-            Kept in Meridian. <Link href="/signup">Start your own journal</Link>.
+            Kept in Trekkster. <Link href="/signup">Start your own journal</Link>.
           </p>
         </div>
       </div>
