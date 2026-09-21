@@ -22,6 +22,7 @@ export default function Nav({ user, active }) {
       </Link>
       <Link href="/trips" aria-current={active === "trips" ? "page" : undefined}>Trips</Link>
       <Link href="/trips#map">Map</Link>
+      <Link href="/buddies" aria-current={active === "buddies" ? "page" : undefined}>Buddies</Link>
       <Link href="/profile" aria-current={active === "profile" ? "page" : undefined}>Profile</Link>
       {isAdminUser(user) && (
         <Link href="/admin" aria-current={active === "admin" ? "page" : undefined}>Admin</Link>

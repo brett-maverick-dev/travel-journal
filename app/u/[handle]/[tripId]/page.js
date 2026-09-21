@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import TripMap from "@/components/TripMap";
+import BuddyActions from "@/app/buddies/BuddyActions";
 import { db } from "@/lib/db";
+import { currentUser } from "@/lib/session";
 import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON } from "@/lib/format";
 
 export async function generateMetadata({ params }) {
@@ -24,6 +26,17 @@ export default async function PublicTrip({ params }) {
   });
   if (!trip || trip.visibility !== "PUBLIC" || trip.user.handle !== handle) notFound();
 
+  const viewer = await currentUser();
+  let buddyRow = null;
+  if (viewer && viewer.id !== trip.user.id) {
+    buddyRow = await db.buddy.findFirst({
+      where: { OR: [
+        { requesterId: viewer.id, addresseeId: trip.user.id },
+        { requesterId: trip.user.id, addresseeId: viewer.id }
+      ] }
+    });
+  }
+
   const days = trip.pages.filter((p) => p.kind === "DAY");
   const mapTrips = [{
     id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl,
@@ -36,12 +49,18 @@ export default async function PublicTrip({ params }) {
       <div style={{ position: "relative", height: 320, overflow: "hidden", background: "var(--color-neutral-900)" }}>
         {trip.coverUrl && <img src={trip.coverUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, var(--color-bg) 2%, color-mix(in srgb, var(--color-bg) 55%, transparent) 45%, transparent)" }} />
-        <div style={{ position: "absolute", left: 34, right: 34, bottom: 26 }}>
-          <div className="card-kicker">{trip.country}</div>
-          <h1 style={{ margin: "4px 0 6px", fontSize: 44 }}>{trip.name}</h1>
-          <div className="text-muted" style={{ fontSize: 14 }}>
-            {fmtRange(trip.startDate, trip.endDate)} · a journal by {trip.user.handle}
+        <div style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div>
+            <div className="card-kicker">{trip.country}</div>
+            <h1 style={{ margin: "4px 0 6px", fontSize: 44 }}>{trip.name}</h1>
+            <div className="text-muted" style={{ fontSize: 14 }}>
+              {fmtRange(trip.startDate, trip.endDate)} · a journal by {trip.user.handle}
+            </div>
           </div>
+          {viewer && viewer.id !== trip.user.id && (
+            <BuddyActions targetId={trip.user.id} status={buddyRow?.status}
+              isRequester={buddyRow?.requesterId === viewer.id} rowId={buddyRow?.id} />
+          )}
         </div>
       </div>
 

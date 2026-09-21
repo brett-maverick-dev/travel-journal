@@ -33,6 +33,26 @@ model User {
   pinterestUrl  String   @default("")
   createdAt     DateTime @default(now())
   trips         Trip[]
+  buddiesSent   Buddy[]  @relation("BuddyRequester")
+  buddiesRecv   Buddy[]  @relation("BuddyAddressee")
+}
+
+// A friend request / connection between two users — "Travel Buddies".
+// requesterId is whoever *initiated* the current row: who sent the request,
+// or who did the blocking. At most one row should exist per pair of users
+// (checked in app code, not the DB, since which side is requester can flip
+// when a block is applied) — see findBuddyRow() in app/actions.js.
+model Buddy {
+  id          String   @id @default(cuid())
+  requesterId String
+  requester   User     @relation("BuddyRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User     @relation("BuddyAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      String   @default("PENDING") // PENDING | ACCEPTED | BLOCKED
+  createdAt   DateTime @default(now())
+
+  @@index([requesterId])
+  @@index([addresseeId])
 }
 
 model Trip {

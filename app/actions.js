@@ -461,3 +461,94 @@ export async function adminCreateBackup() {
   revalidatePath("/admin/backups");
   return { ok: true, file };
 }
+
+/* ── travel buddies ───────────────────────────────────────────────── */
+
+// At most one row should exist between any two users — a block or a request
+// always supersedes whatever was there before, so callers check this first
+// rather than relying on a DB constraint (which side is requester can flip
+// when a block gets applied, so a simple unique(requesterId, addresseeId)
+// wouldn't catch the reverse-direction duplicate).
+async function findBuddyRow(aId, bId) {
+  return db.buddy.findFirst({
+    where: { OR: [{ requesterId: aId, addresseeId: bId }, { requesterId: bId, addresseeId: aId }] }
+  });
+}
+
+export async function sendBuddyRequest(targetUserId) {
+  const me = await requireUser();
+  if (targetUserId === me.id) return { error: "That's you." };
+  const target = await db.user.findUnique({ where: { id: targetUserId } });
+  if (!target) return { error: "User not found." };
+
+  const existing = await findBuddyRow(me.id, targetUserId);
+  if (existing) {
+    if (existing.status === "BLOCKED") return { error: "You can't send a request here." };
+    if (existing.status === "ACCEPTED") return { error: "You're already travel buddies." };
+    return { error: "A request is already pending." };
+  }
+  await db.buddy.create({ data: { requesterId: me.id, addresseeId: targetUserId, status: "PENDING" } });
+  revalidatePath("/buddies");
+  return { ok: true };
+}
+
+export async function acceptBuddyRequest(rowId) {
+  const me = await requireUser();
+  const row = await db.buddy.findUnique({ where: { id: rowId } });
+  if (!row || row.addresseeId !== me.id || row.status !== "PENDING") return { error: "That request isn't there anymore." };
+  await db.buddy.update({ where: { id: rowId }, data: { status: "ACCEPTED" } });
+  revalidatePath("/buddies");
+  return { ok: true };
+}
+
+// Declines an incoming request or cancels one you sent — either side of a
+// still-pending row can just remove it.
+export async function declineBuddyRequest(rowId) {
+  const me = await requireUser();
+  const row = await db.buddy.findUnique({ where: { id: rowId } });
+  if (!row || row.status !== "PENDING" || (row.requesterId !== me.id && row.addresseeId !== me.id)) {
+    return { error: "That request isn't there anymore." };
+  }
+  await db.buddy.delete({ where: { id: rowId } });
+  revalidatePath("/buddies");
+  return { ok: true };
+}
+
+export async function removeBuddy(rowId) {
+  const me = await requireUser();
+  const row = await db.buddy.findUnique({ where: { id: rowId } });
+  if (!row || row.status !== "ACCEPTED" || (row.requesterId !== me.id && row.addresseeId !== me.id)) {
+    return { error: "Not found." };
+  }
+  await db.buddy.delete({ where: { id: rowId } });
+  revalidatePath("/buddies");
+  return { ok: true };
+}
+
+export async function blockUser(targetUserId) {
+  const me = await requireUser();
+  if (targetUserId === me.id) return { error: "That's you." };
+  const target = await db.user.findUnique({ where: { id: targetUserId } });
+  if (!target) return { error: "User not found." };
+
+  const existing = await findBuddyRow(me.id, targetUserId);
+  if (existing) {
+    await db.buddy.update({
+      where: { id: existing.id },
+      data: { requesterId: me.id, addresseeId: targetUserId, status: "BLOCKED" }
+    });
+  } else {
+    await db.buddy.create({ data: { requesterId: me.id, addresseeId: targetUserId, status: "BLOCKED" } });
+  }
+  revalidatePath("/buddies");
+  return { ok: true };
+}
+
+export async function unblockUser(rowId) {
+  const me = await requireUser();
+  const row = await db.buddy.findUnique({ where: { id: rowId } });
+  if (!row || row.status !== "BLOCKED" || row.requesterId !== me.id) return { error: "Not found." };
+  await db.buddy.delete({ where: { id: rowId } });
+  revalidatePath("/buddies");
+  return { ok: true };
+}
