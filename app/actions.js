@@ -19,7 +19,21 @@ async function uniqueHandle(email) {
   return handle;
 }
 
+// Owner or trip buddy — trip buddies are full collaborators, so this covers
+// every content edit (destinations, pages, photos, rename, cover, visibility).
 async function assertOwner(tripId) {
+  const user = await requireUser();
+  const trip = await db.trip.findUnique({ where: { id: tripId } });
+  if (!trip) throw new Error("FORBIDDEN");
+  if (trip.userId === user.id) return trip;
+  const shared = await db.tripBuddy.findFirst({ where: { tripId, userId: user.id } });
+  if (!shared) throw new Error("FORBIDDEN");
+  return trip;
+}
+
+// Literal owner only — for deleting the trip and managing who has access to
+// it, neither of which should be delegable to a collaborator.
+async function assertTripOwner(tripId) {
   const user = await requireUser();
   const trip = await db.trip.findUnique({ where: { id: tripId } });
   if (!trip || trip.userId !== user.id) throw new Error("FORBIDDEN");
@@ -270,10 +284,38 @@ export async function renameTrip(tripId, name) {
 }
 
 export async function deleteTrip(tripId) {
-  await assertOwner(tripId);
+  await assertTripOwner(tripId);
   await db.trip.delete({ where: { id: tripId } });
   revalidatePath("/trips");
   redirect("/trips");
+}
+
+export async function addTripBuddy(tripId, buddyUserId) {
+  const trip = await assertTripOwner(tripId);
+  const isBuddy = await db.buddy.findFirst({
+    where: {
+      status: "ACCEPTED",
+      OR: [
+        { requesterId: trip.userId, addresseeId: buddyUserId },
+        { requesterId: buddyUserId, addresseeId: trip.userId }
+      ]
+    }
+  });
+  if (!isBuddy) return { error: "Add them as a travel buddy first." };
+
+  const existing = await db.tripBuddy.findFirst({ where: { tripId, userId: buddyUserId } });
+  if (existing) return { error: "Already added." };
+
+  await db.tripBuddy.create({ data: { tripId, userId: buddyUserId } });
+  revalidatePath("/trips/" + tripId);
+  return { ok: true };
+}
+
+export async function removeTripBuddy(tripId, buddyUserId) {
+  await assertTripOwner(tripId);
+  await db.tripBuddy.deleteMany({ where: { tripId, userId: buddyUserId } });
+  revalidatePath("/trips/" + tripId);
+  return { ok: true };
 }
 
 /* ── destinations ─────────────────────────────────────────────────── */

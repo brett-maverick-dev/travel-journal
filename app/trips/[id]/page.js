@@ -9,6 +9,7 @@ import CoverUpload from "./CoverUpload";
 import AddButton from "./AddButton";
 import DeleteTripButton from "./DeleteTripButton";
 import DeletePageButton from "@/components/DeletePageButton";
+import TripBuddies from "./TripBuddies";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage } from "@/app/actions";
@@ -22,11 +23,27 @@ export default async function TripPage({ params }) {
   const trip = await db.trip.findUnique({
     where: { id },
     include: {
+      user: true,
       destinations: { orderBy: { position: "asc" } },
-      pages: { orderBy: [{ position: "asc" }, { date: "asc" }], include: { photos: { orderBy: { position: "asc" } } } }
+      pages: { orderBy: [{ position: "asc" }, { date: "asc" }], include: { photos: { orderBy: { position: "asc" } } } },
+      buddies: { include: { user: true }, orderBy: { addedAt: "asc" } }
     }
   });
-  if (!trip || trip.userId !== user.id) notFound();
+  const isOwner = trip?.userId === user.id;
+  const isCollaborator = isOwner || trip?.buddies.some((b) => b.userId === user.id);
+  if (!trip || !isCollaborator) notFound();
+
+  const availableBuddies = isOwner
+    ? await db.buddy.findMany({
+        where: {
+          status: "ACCEPTED",
+          OR: [{ requesterId: user.id }, { addresseeId: user.id }]
+        },
+        include: { requester: true, addressee: true }
+      }).then((rows) => rows
+        .map((r) => (r.requesterId === user.id ? r.addressee : r.requester))
+        .filter((u) => !trip.buddies.some((b) => b.userId === u.id)))
+    : [];
 
   const days = trip.pages.filter((p) => p.kind === "DAY");
   const activitiesFor = (dayId) => trip.pages.filter((p) => p.kind === "ACTIVITY" && p.parentId === dayId);
@@ -50,8 +67,10 @@ export default async function TripPage({ params }) {
             <i className="ph ph-arrow-left" />All trips
           </Link>
           <CoverUpload tripId={trip.id} hasCover={Boolean(trip.coverUrl)} />
-          <DeleteTripButton tripId={trip.id} tripName={trip.name}
-            style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }} />
+          {isOwner && (
+            <DeleteTripButton tripId={trip.id} tripName={trip.name}
+              style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }} />
+          )}
         </div>
         <div style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", gap: 26, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 420px", minWidth: 0 }}>
@@ -62,8 +81,13 @@ export default async function TripPage({ params }) {
               {fmtRange(trip.startDate, trip.endDate)} · {trip.destinations.length} destinations · {trip.pages.length} pages
             </div>
           </div>
-          <VisibilityToggle tripId={trip.id} visibility={trip.visibility} shareUrl={"/u/" + user.handle + "/" + trip.id} />
+          <VisibilityToggle tripId={trip.id} visibility={trip.visibility} shareUrl={"/u/" + trip.user.handle + "/" + trip.id} />
         </div>
+      </div>
+
+      <div style={{ maxWidth: 1420, margin: "0 auto", padding: "18px 34px 0" }}>
+        <TripBuddies tripId={trip.id} isOwner={isOwner}
+          companions={trip.buddies.map((b) => b.user)} available={availableBuddies} />
       </div>
 
       <div className="page-shell split" style={{ display: "grid", gridTemplateColumns: "308px minmax(0, 1fr)", gap: 48, alignItems: "start" }}>

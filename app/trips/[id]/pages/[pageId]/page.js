@@ -18,7 +18,10 @@ export default async function ActivityPage({ params }) {
     where: { id: pageId },
     include: { trip: true, photos: { orderBy: { position: "asc" } } }
   });
-  if (!page || page.tripId !== id || page.trip.userId !== user.id) notFound();
+  if (!page || page.tripId !== id) notFound();
+  const isCollaborator = page.trip.userId === user.id ||
+    await db.tripBuddy.findFirst({ where: { tripId: id, userId: user.id } });
+  if (!isCollaborator) notFound();
   const parent = page.parentId ? await db.page.findUnique({ where: { id: page.parentId } }) : null;
 
   return (

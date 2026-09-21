@@ -66,8 +66,11 @@ export default function TripBrowser({ trips }) {
               style={{ padding: 16, gap: 10, textDecoration: "none", color: "inherit" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <div className="card-kicker">{t.country}</div>
-                <span className={t.visibility === "PUBLIC" ? "tag tag-accent" : "tag tag-neutral"}>
-                  {t.visibility === "PUBLIC" ? "Public" : "Private"}
+                <span style={{ display: "flex", gap: 6 }}>
+                  {t.sharedBy && <span className="tag tag-outline">Shared by @{t.sharedBy}</span>}
+                  <span className={t.visibility === "PUBLIC" ? "tag tag-accent" : "tag tag-neutral"}>
+                    {t.visibility === "PUBLIC" ? "Public" : "Private"}
+                  </span>
                 </span>
               </div>
               <div className="card-title" style={{ fontSize: 19 }}>{t.name}</div>

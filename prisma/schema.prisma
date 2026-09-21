@@ -10,31 +10,32 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  handle        String   @unique
-  passwordHash  String
-  verified      Boolean  @default(false)
-  isAdmin       Boolean  @default(false)
-  verifyCode    String?
-  codeExpires   DateTime?
-  resetCode     String?
-  resetExpires  DateTime?
-  name          String   @default("")
-  avatarUrl     String?
-  homeCity      String   @default("")
-  favoritePlace String   @default("")
-  bio           String   @default("")
-  facebookUrl   String   @default("")
-  instagramUrl  String   @default("")
-  tiktokUrl     String   @default("")
-  xUrl          String   @default("")
-  youtubeUrl    String   @default("")
-  pinterestUrl  String   @default("")
-  createdAt     DateTime @default(now())
-  trips         Trip[]
-  buddiesSent   Buddy[]  @relation("BuddyRequester")
-  buddiesRecv   Buddy[]  @relation("BuddyAddressee")
+  id                String      @id @default(cuid())
+  email             String      @unique
+  handle            String      @unique
+  passwordHash      String
+  verified          Boolean     @default(false)
+  isAdmin           Boolean     @default(false)
+  verifyCode        String?
+  codeExpires       DateTime?
+  resetCode         String?
+  resetExpires      DateTime?
+  name              String      @default("")
+  avatarUrl         String?
+  homeCity          String      @default("")
+  favoritePlace     String      @default("")
+  bio               String      @default("")
+  facebookUrl       String      @default("")
+  instagramUrl      String      @default("")
+  tiktokUrl         String      @default("")
+  xUrl              String      @default("")
+  youtubeUrl        String      @default("")
+  pinterestUrl      String      @default("")
+  createdAt         DateTime    @default(now())
+  trips             Trip[]
+  buddiesSent       Buddy[]     @relation("BuddyRequester")
+  buddiesRecv       Buddy[]     @relation("BuddyAddressee")
+  tripsSharedWithMe TripBuddy[]
 }
 
 // A friend request / connection between two users — "Travel Buddies".
@@ -68,7 +69,25 @@ model Trip {
   createdAt    DateTime      @default(now())
   destinations Destination[]
   pages        Page[]
+  buddies      TripBuddy[]
 
+  @@index([userId])
+}
+
+// A travel buddy the trip owner has added as a full collaborator on this
+// trip — can view and edit it like the owner, regardless of the trip's
+// own visibility. Only actual travel buddies (an ACCEPTED Buddy row with
+// the owner) can be added — see addTripBuddy() in app/actions.js.
+model TripBuddy {
+  id      String   @id @default(cuid())
+  tripId  String
+  trip    Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addedAt DateTime @default(now())
+
+  @@unique([tripId, userId])
+  @@index([tripId])
   @@index([userId])
 }
 
@@ -82,7 +101,7 @@ model Destination {
   arrive    DateTime
   depart    DateTime
   transport String   @default("Flight") // Flight | Train | Bus | Rental car | Ferry | On foot
-  detail    String   @default("")       // "NH106 · 11h 40m"
+  detail    String   @default("") // "NH106 · 11h 40m"
   position  Int      @default(0)
 
   @@index([tripId])
@@ -93,16 +112,16 @@ model Page {
   tripId   String
   trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   kind     String   @default("DAY") // DAY | ACTIVITY
-  parentId String?                 // set on ACTIVITY pages: the day they belong to
+  parentId String? // set on ACTIVITY pages: the day they belong to
   title    String   @default("Untitled page")
   date     DateTime
-  time     String?                 // activity pages: "14:20"
+  time     String? // activity pages: "14:20"
   place    String   @default("")
   weather  String   @default("")
   spend    String   @default("")
   steps    String   @default("")
   notes    String   @default("")
-  tags     String   @default("")   // comma separated
+  tags     String   @default("") // comma separated
   hidden   Boolean  @default(false)
   position Int      @default(0)
   photos   Photo[]
@@ -112,12 +131,12 @@ model Page {
 }
 
 model Photo {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   pageId   String
-  page     Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  page     Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
   url      String
-  caption  String  @default("")
-  position Int     @default(0)
+  caption  String @default("")
+  position Int    @default(0)
 
   @@index([pageId])
 }

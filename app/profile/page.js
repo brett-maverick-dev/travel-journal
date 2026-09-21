@@ -1,20 +1,12 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import Nav from "@/components/Nav";
 import Field from "@/components/Field";
 import AvatarUpload from "./AvatarUpload";
 import HandleField from "./HandleField";
 import { currentUser } from "@/lib/session";
 import { updateProfile } from "@/app/actions";
-import { fmt } from "@/lib/format";
-
-const SOCIALS = [
-  { field: "facebookUrl", icon: "ph-facebook-logo", label: "Facebook", placeholder: "https://facebook.com/yourname" },
-  { field: "instagramUrl", icon: "ph-instagram-logo", label: "Instagram", placeholder: "https://instagram.com/yourhandle" },
-  { field: "tiktokUrl", icon: "ph-tiktok-logo", label: "TikTok", placeholder: "https://tiktok.com/@yourhandle" },
-  { field: "xUrl", icon: "ph-x-logo", label: "X", placeholder: "https://x.com/yourhandle" },
-  { field: "youtubeUrl", icon: "ph-youtube-logo", label: "YouTube", placeholder: "https://youtube.com/@yourchannel" },
-  { field: "pinterestUrl", icon: "ph-pinterest-logo", label: "Pinterest", placeholder: "https://pinterest.com/yourhandle" }
-];
+import { fmt, SOCIALS } from "@/lib/format";
 
 export default async function Profile() {
   const user = await currentUser();
@@ -29,7 +21,7 @@ export default async function Profile() {
       <div className="page-shell" style={{ maxWidth: 640, paddingTop: 34 }}>
         <h2 style={{ margin: "0 0 4px" }}>Your profile</h2>
         <p className="text-muted" style={{ fontSize: 13, margin: "0 0 26px" }}>
-          Member since {fmt(user.createdAt)}
+          Member since {fmt(user.createdAt)} · <Link href={"/u/" + user.handle}>View your public profile</Link>
         </p>
 
         <div className="card elev-sm" style={{ padding: 24, gap: 20 }}>

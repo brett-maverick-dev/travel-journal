@@ -11,9 +11,10 @@ export default async function Trips() {
   if (!user.verified) redirect("/verify?email=" + encodeURIComponent(user.email));
 
   const rows = await db.trip.findMany({
-    where: { userId: user.id },
+    where: { OR: [{ userId: user.id }, { buddies: { some: { userId: user.id } } }] },
     orderBy: { startDate: "desc" },
     include: {
+      user: true,
       destinations: { orderBy: { position: "asc" } },
       pages: { select: { id: true } }
     }
@@ -28,6 +29,7 @@ export default async function Trips() {
     dateRange: fmtRange(t.startDate, t.endDate),
     href: "/trips/" + t.id,
     pageLine: t.destinations.length + " destinations · " + t.pages.length + " pages",
+    sharedBy: t.userId === user.id ? null : t.user.handle,
     stops: t.destinations.map((d) => ({
       name: d.name, lat: d.lat, lng: d.lng, icon: TRANSPORT_ICON[d.transport] || "ph-path"
     }))
