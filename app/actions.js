@@ -205,12 +205,23 @@ export async function createTrip(_prev, form) {
   const endDate = new Date(form.get("end") || startDate);
   const visibility = form.get("visibility") === "PUBLIC" ? "PUBLIC" : "PRIVATE";
 
-  const places = form.getAll("place").map(String).map((s) => s.trim()).filter(Boolean);
-  const arrivals = form.getAll("arrive").map(String);
-  const transports = form.getAll("transport").map(String);
+  const destPlaces = form.getAll("place").map(String).map((s) => s.trim()).filter(Boolean);
+  const destArrivals = form.getAll("arrive").map(String);
+  const destTransports = form.getAll("transport").map(String);
+
+  // The departure city is optional and becomes destination 0 — the first real
+  // destination's own "Getting there" (already collected per-stop) then reads
+  // as "how you got there from here", with no separate transport field needed
+  // for the departure entry itself.
+  const departureCity = String(form.get("departureCity") || "").trim();
+  const departureDate = String(form.get("departureDate") || "");
+
+  const places = departureCity ? [departureCity, ...destPlaces] : destPlaces;
+  const arrivals = departureCity ? [departureDate, ...destArrivals] : destArrivals;
+  const transports = departureCity ? ["", ...destTransports] : destTransports;
 
   const trip = await db.trip.create({
-    data: { userId: user.id, name, startDate, endDate, visibility, country: places[0] || "" }
+    data: { userId: user.id, name, startDate, endDate, visibility, country: destPlaces[0] || "" }
   });
 
   const destinations = [];

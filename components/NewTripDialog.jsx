@@ -47,6 +47,22 @@ export default function NewTripDialog() {
               </div>
             </div>
 
+            <h6 className="text-muted" style={{ margin: "8px 0 0" }}>Departure</h6>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 150px", gap: 8 }}>
+              <div className="field">
+                <label htmlFor="nt-dep-city">Leaving from</label>
+                <input className="input" id="nt-dep-city" name="departureCity" placeholder="Home city" />
+              </div>
+              <div className="field">
+                <label htmlFor="nt-dep-date">Departure date</label>
+                <input className="input" id="nt-dep-date" name="departureDate" type="date" />
+              </div>
+            </div>
+            <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>
+              Optional — adds a pin for where you're leaving from. The first destination's
+              "Getting there" below describes travel from here.
+            </p>
+
             <h6 className="text-muted" style={{ margin: "8px 0 0" }}>Destinations</h6>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {stops.map((key, i) => (
