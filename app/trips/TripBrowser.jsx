@@ -13,7 +13,7 @@ export default function TripBrowser({ trips }) {
 
   const shown = trips.filter((t) =>
     filter === "All" ? true : t.visibility === filter.toUpperCase());
-  const pins = trips.reduce((n, t) => n + t.stops.length, 0);
+  const pins = trips.reduce((n, t) => n + t.stops.filter((s) => s.kind !== "departure").length, 0);
   const publicCount = trips.filter((t) => t.visibility === "PUBLIC").length;
 
   return (

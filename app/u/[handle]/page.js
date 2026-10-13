@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import TripMap from "@/components/TripMap";
 import { db } from "@/lib/db";
-import { fmtRange, SOCIALS } from "@/lib/format";
+import { fmtRange, mapStops, SOCIALS } from "@/lib/format";
+import { withDepartureCoords } from "@/lib/geo";
 
 export async function generateMetadata({ params }) {
   const { handle } = await params;
@@ -25,10 +26,12 @@ export default async function PublicProfile({ params }) {
 
   const initials = (user.name || user.handle || "?").slice(0, 2).toUpperCase();
   const socials = SOCIALS.filter((s) => user[s.field]);
-  const mapTrips = trips.map((t) => ({
+  const located = [];
+  for (const t of trips) located.push(await withDepartureCoords(t));
+  const mapTrips = located.map((t) => ({
     id: t.id, name: t.name, country: t.country, coverUrl: t.coverUrl,
     dateRange: fmtRange(t.startDate, t.endDate), href: "/u/" + user.handle + "/" + t.id,
-    stops: t.destinations.map((d) => ({ name: d.name, lat: d.lat, lng: d.lng }))
+    stops: mapStops(t)
   }));
 
   return (

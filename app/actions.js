@@ -305,11 +305,13 @@ export async function createTrip(_prev, form) {
   // there" reads as the leg from it.
   const departureCity = String(form.get("departureCity") || "").trim();
   const departureDate = departureCity ? parseDate(form.get("departureDate")) : null;
+  const departureCoords = departureCity ? await geocode(departureCity) : null;
 
   const trip = await db.trip.create({
     data: {
       userId: user.id, name, startDate, endDate, visibility, country: places[0] || "",
-      departureCity, departureDate
+      departureCity, departureDate,
+      departureLat: departureCoords?.lat ?? null, departureLng: departureCoords?.lng ?? null
     }
   });
 
@@ -447,7 +449,9 @@ export async function updateDeparture(tripId, field, value) {
   await assertOwner(tripId);
   let data;
   if (field === "city") {
-    data = { departureCity: String(value || "").trim() };
+    const city = String(value || "").trim();
+    const coords = city ? await geocode(city) : null; // re-pin the map's starting point
+    data = { departureCity: city, departureLat: coords?.lat ?? null, departureLng: coords?.lng ?? null };
   } else if (field === "date") {
     const date = parseDate(value);
     if (!date) return { error: "Pick a date." };
@@ -457,6 +461,7 @@ export async function updateDeparture(tripId, field, value) {
   }
   await db.trip.update({ where: { id: tripId }, data });
   revalidatePath("/trips/" + tripId);
+  revalidatePath("/trips");
 }
 
 // Removes a destination along with the day pages that belong only to it and
@@ -506,7 +511,7 @@ export async function makeDeparture(id) {
   await assertOwner(dest.tripId);
   await db.trip.update({
     where: { id: dest.tripId },
-    data: { departureCity: dest.name, departureDate: dest.arrive }
+    data: { departureCity: dest.name, departureDate: dest.arrive, departureLat: dest.lat, departureLng: dest.lng }
   });
   const result = await removeDestinationAndBlankPages(dest);
   revalidatePath("/trips/" + dest.tripId);

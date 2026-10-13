@@ -3,7 +3,8 @@ import Nav from "@/components/Nav";
 import TripBrowser from "./TripBrowser";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { fmtRange, TRANSPORT_ICON } from "@/lib/format";
+import { fmtRange, mapStops, TRANSPORT_ICON } from "@/lib/format";
+import { withDepartureCoords } from "@/lib/geo";
 
 export default async function Trips() {
   const user = await currentUser();
@@ -20,7 +21,9 @@ export default async function Trips() {
     }
   });
 
-  const trips = rows.map((t) => ({
+  const located = [];
+  for (const t of rows) located.push(await withDepartureCoords(t)); // one lookup at a time — Nominatim's rule
+  const trips = located.map((t) => ({
     id: t.id,
     name: t.name,
     country: t.country || t.destinations[0]?.name || "",
@@ -30,9 +33,7 @@ export default async function Trips() {
     href: "/trips/" + t.id,
     pageLine: t.destinations.length + " destinations · " + t.pages.length + " pages",
     sharedBy: t.userId === user.id ? null : t.user.handle,
-    stops: t.destinations.map((d) => ({
-      name: d.name, lat: d.lat, lng: d.lng, icon: TRANSPORT_ICON[d.transport] || "ph-path"
-    }))
+    stops: mapStops(t, (d) => ({ icon: TRANSPORT_ICON[d.transport] || "ph-path" }))
   }));
 
   return (

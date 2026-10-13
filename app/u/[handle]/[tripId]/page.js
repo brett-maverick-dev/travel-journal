@@ -4,8 +4,9 @@ import TripMap from "@/components/TripMap";
 import BuddyActions from "@/app/buddies/BuddyActions";
 import TripJournal from "@/components/TripJournal";
 import { db } from "@/lib/db";
+import { withDepartureCoords } from "@/lib/geo";
 import { currentUser } from "@/lib/session";
-import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON } from "@/lib/format";
+import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON, mapStops } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP } from "@/lib/pages";
 
 export async function generateMetadata({ params }) {
@@ -126,7 +127,7 @@ export default async function PublicTrip({ params, searchParams }) {
   const mapTrips = [{
     id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl,
     dateRange: fmtRange(trip.startDate, trip.endDate), href: "#",
-    stops: trip.destinations.map((d) => ({ name: d.name, lat: d.lat, lng: d.lng }))
+    stops: mapStops(await withDepartureCoords(trip))
   }];
 
   return (

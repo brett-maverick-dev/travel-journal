@@ -14,8 +14,9 @@ import DestinationActions from "./DestinationActions";
 import TripJournal from "@/components/TripJournal";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
+import { withDepartureCoords } from "@/lib/geo";
 import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture } from "@/app/actions";
-import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON } from "@/lib/format";
+import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON, mapStops } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP } from "@/lib/pages";
 
 export default async function TripPage({ params, searchParams }) {
@@ -200,7 +201,7 @@ export default async function TripPage({ params, searchParams }) {
   const mapTrips = [{
     id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl,
     dateRange: fmtRange(trip.startDate, trip.endDate), href: "/trips/" + trip.id,
-    stops: trip.destinations.map((d) => ({ name: d.name, lat: d.lat, lng: d.lng }))
+    stops: mapStops(await withDepartureCoords(trip))
   }];
 
   return (

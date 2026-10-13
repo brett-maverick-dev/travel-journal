@@ -5,7 +5,8 @@ import TripMap from "@/components/TripMap";
 import { signUp } from "@/app/actions";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { fmtRange } from "@/lib/format";
+import { fmtRange, mapStops } from "@/lib/format";
+import { withDepartureCoords } from "@/lib/geo";
 
 // The signup screen is the site root so platform health checks get a 200 here
 // rather than following a redirect.
@@ -20,11 +21,13 @@ export default async function Home() {
       include: { destinations: { orderBy: { position: "asc" } }, user: true },
       take: 24
     });
-    trips = rows.map((t) => ({
+    const located = [];
+    for (const t of rows) located.push(await withDepartureCoords(t));
+    trips = located.map((t) => ({
       id: t.id, name: t.name, country: t.country, coverUrl: t.coverUrl,
       dateRange: fmtRange(t.startDate, t.endDate),
       href: "/u/" + t.user.handle + "/" + t.id,
-      stops: t.destinations.map((d) => ({ name: d.name, lat: d.lat, lng: d.lng }))
+      stops: mapStops(t)
     }));
   } catch {
     // First boot before the schema is applied: still render, just with an empty map.

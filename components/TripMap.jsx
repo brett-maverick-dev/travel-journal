@@ -24,10 +24,61 @@ function esc(value) {
   ));
 }
 
-function pin(label, primary) {
+// The shortest path over the globe between two [lat, lng] points — the arc a
+// flight actually follows — as a polyline with a point every ~2°. A straight
+// line on the flat map would send Phoenix → Tokyo east across the Atlantic.
+function greatCircle([lat1, lng1], [lat2, lng2]) {
+  const r = Math.PI / 180;
+  const vec = (lat, lng) => [Math.cos(lat * r) * Math.cos(lng * r), Math.cos(lat * r) * Math.sin(lng * r), Math.sin(lat * r)];
+  const a = vec(lat1, lng1), b = vec(lat2, lng2);
+  const omega = Math.acos(Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+  if (omega < 1e-6 || Math.PI - omega < 1e-6) return [[lat1, lng1], [lat2, lng2]];
+  const n = Math.max(2, Math.ceil(omega / r / 2));
+  const points = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const s1 = Math.sin((1 - t) * omega) / Math.sin(omega), s2 = Math.sin(t * omega) / Math.sin(omega);
+    const [x, y, z] = [0, 1, 2].map((k) => s1 * a[k] + s2 * b[k]);
+    points.push([Math.atan2(z, Math.hypot(x, y)) / r, Math.atan2(y, x) / r]);
+  }
+  return points;
+}
+
+// Shift each longitude by whole turns so it stays within 180° of the one
+// before — a route over the Pacific then crosses the date line as one
+// continuous line instead of snapping back across the whole map.
+function unwrap(points, startLng) {
+  let prev = startLng;
+  return points.map(([lat, lng]) => {
+    const shifted = lng + Math.round((prev - lng) / 360) * 360;
+    prev = shifted;
+    return [lat, shifted];
+  });
+}
+
+// A trip's stops placed on the map: positions (longitudes unwrapped along the
+// route, so pins sit on the line) and the route through them as arcs.
+function layout(stops) {
+  const placed = [], path = [];
+  stops.forEach((s, i) => {
+    if (i === 0) { placed.push([s.lat, s.lng]); path.push([s.lat, s.lng]); return; }
+    const prev = stops[i - 1];
+    const arc = unwrap(greatCircle([prev.lat, prev.lng], [s.lat, s.lng]), placed[i - 1][1]);
+    path.push(...arc.slice(1));
+    placed.push(arc[arc.length - 1]);
+  });
+  return { placed, path };
+}
+
+// variant: "primary" (the trip's first destination, labelled with the trip
+// name), "stop" (later destinations) or "departure" (where the trip starts).
+function pin(label, variant) {
+  const primary = variant === "primary";
   const dot = primary
     ? "<span style='width:11px;height:11px;border-radius:50%;background:#968ae0;box-shadow:0 0 0 4px rgba(150,138,224,.22),0 0 12px rgba(150,138,224,.7);flex:none'></span>"
-    : "<span style='width:7px;height:7px;border-radius:50%;border:1.5px solid #b5abfc;flex:none'></span>";
+    : variant === "departure"
+      ? "<i class='ph ph-house-line' style='font-size:12px;line-height:1;color:#cfd3e5;flex:none'></i>"
+      : "<span style='width:7px;height:7px;border-radius:50%;border:1.5px solid #b5abfc;flex:none'></span>";
   const text = "<span class='tm-lbl' style='font:" + (primary ? "500 12px" : "400 10px") +
     "/1 Inter,system-ui,sans-serif;color:" + (primary ? "#e9e9ed" : "#b2b6ca") +
     ";white-space:nowrap'>" + esc(label) + "</span>";
@@ -65,7 +116,9 @@ export default function TripMap({ trips, height = 420, only = false, hoverId = "
       if (dead || !L || !host.current || state.current.map) return;
 
       const map = L.map(host.current, {
-        zoomControl: false, worldCopyJump: true, scrollWheelZoom: false, minZoom: 2
+        // A route like Phoenix → Tokyo spans a third of the globe; the small
+        // per-trip map needs zoom 1 to fit that in ~300px.
+        zoomControl: false, worldCopyJump: true, scrollWheelZoom: false, minZoom: only ? 1 : 2
       });
       L.control.zoom({ position: "bottomright" }).addTo(map);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -78,14 +131,16 @@ export default function TripMap({ trips, height = 420, only = false, hoverId = "
         const pts = trip.stops.filter((s) => s.lat != null && s.lng != null);
         if (!pts.length) return;
         const group = L.layerGroup().addTo(map);
-        const coords = pts.map((s) => [s.lat, s.lng]);
-        coords.forEach((c) => all.push(c));
-        if (coords.length > 1) {
-          group.addLayer(L.polyline(coords, { color: "#968ae0", weight: 1.4, opacity: 0.5, dashArray: "4 5" }));
+        const { placed, path } = layout(pts);
+        path.forEach((c) => all.push(c)); // arcs can bow well outside their end points
+        if (pts.length > 1) {
+          group.addLayer(L.polyline(path, { color: "#968ae0", weight: 1.4, opacity: 0.5, dashArray: "4 5" }));
         }
+        const firstDest = pts.findIndex((s) => s.kind !== "departure");
         pts.forEach((s, i) => {
-          const m = L.marker([s.lat, s.lng], {
-            icon: L.divIcon({ className: "", iconSize: null, html: pin(i === 0 ? trip.name : s.name, i === 0) })
+          const variant = s.kind === "departure" ? "departure" : i === firstDest ? "primary" : "stop";
+          const m = L.marker(placed[i], {
+            icon: L.divIcon({ className: "", iconSize: null, html: pin(variant === "primary" ? trip.name : s.name, variant) })
           });
           if (!only) m.bindPopup(popup(trip), { minWidth: 236, maxWidth: 236, offset: [4, -2] });
           group.addLayer(m);

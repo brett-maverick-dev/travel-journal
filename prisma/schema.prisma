@@ -74,6 +74,8 @@ model Trip {
   // the leg from here.
   departureCity String       @default("")
   departureDate DateTime?
+  departureLat  Float? // geocoded from departureCity, for the map's starting pin
+  departureLng  Float?
   createdAt    DateTime      @default(now())
   destinations Destination[]
   pages        Page[]
