@@ -30,7 +30,7 @@ export default async function ActivityPage({ params }) {
       <div className="page-shell" style={{ maxWidth: 900 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>
           <Link href={"/trips/" + id + (parent ? "#page-" + parent.id : "")} className="btn btn-ghost">
-            <i className="ph ph-arrow-left" />{parent ? parent.title : "Back to trip"}
+            <i className="ph ph-arrow-left" />{parent?.title || "Back to trip"}
           </Link>
           <DeletePageButton pageId={page.id} confirmLabel={page.title ? '"' + page.title + '"' : "this page"} />
         </div>

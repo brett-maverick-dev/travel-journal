@@ -26,7 +26,7 @@ the same API.
 ```bash
 cp .env.example .env        # then edit SESSION_SECRET
 npm install                 # also runs scripts/normalize-routes.mjs (see below)
-npm run migrate             # creates dev.db from prisma/schema.prisma
+npm run migrate             # creates public/assets/data/app.db from prisma/schema.prisma
 npm run seed                # optional: six demo trips
 npm run dev                 # http://localhost:3000
 ```
@@ -69,9 +69,10 @@ The package already meets the platform requirements: `package.json` has a non-em
    | Secret | Value |
    | --- | --- |
    | `SESSION_SECRET` | A long random string (`openssl rand -base64 32`) |
-   | `DATABASE_URL` | `file:./public/assets/data/app.db` — or your Postgres URL |
+   | `DATABASE_URL` | `file:../public/assets/data/app.db` — or your Postgres URL (Prisma resolves SQLite paths from `prisma/`, hence `../`) |
    | `SEED_ON_BOOT` | `1` on the very first boot only, to load the six demo trips |
    | `SMTP_URL` | Optional. Blank means codes print to the runtime log |
+   | `RESTORE_BACKUP` | Optional. A snapshot file name from `/admin/backups` to restore on the next boot (once) |
 
 5. **Import & Deploy**, then open the preview URL.
 6. Sign up. With no `SMTP_URL` set, read the six-digit code from **Runtime Logs**.
@@ -85,7 +86,10 @@ Three platform details the app is built around:
 
 - **Persistence.** Only `/public/assets/` survives a redeploy, so both uploaded photos
   (`public/assets/uploads`) and the SQLite file (`public/assets/data/app.db`) live there.
-  Write nothing you want to keep anywhere else in the project.
+  Write nothing you want to keep anywhere else in the project. Because that's under
+  `public/`, `server.mjs` (and `middleware.js`) refuse every request for
+  `/assets/data/*` so the database and backups are never served as static files.
+  An older `DATABASE_URL` of `file:./public/...` is pinned to the project root on boot.
 - **No deploy shell.** `server.mjs` applies the database schema itself on boot, via
   `prisma migrate deploy`. If it ever hits a database that already has these tables but
   no migration history (e.g. one that predates migrations, built with `prisma db push`),
@@ -95,7 +99,9 @@ Three platform details the app is built around:
 - **Automatic backups.** `server.mjs` also takes a consistent snapshot of `app.db`
   (SQLite `VACUUM INTO`, safe even while the app is live) on every boot and once a day
   after that, keeping the 14 most recent under `public/assets/data/backups/`. An admin
-  can list, trigger, and download them from `/admin/backups`.
+  can list, trigger, and download them from `/admin/backups`. To roll back, set the
+  `RESTORE_BACKUP` secret to a snapshot's file name and redeploy; the current database
+  is saved alongside as `pre-restore-*.db.bak` first.
 
 If a deploy fails, **Runtime Logs** is the first place to look; the schema step logs the
 exact command it ran.

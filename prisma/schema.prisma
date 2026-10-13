@@ -18,8 +18,10 @@ model User {
   isAdmin           Boolean     @default(false)
   verifyCode        String?
   codeExpires       DateTime?
+  verifyAttempts    Int         @default(0) // wrong guesses against the current verifyCode
   resetCode         String?
   resetExpires      DateTime?
+  resetAttempts     Int         @default(0) // wrong guesses against the current resetCode
   name              String      @default("")
   avatarUrl         String?
   homeCity          String      @default("")

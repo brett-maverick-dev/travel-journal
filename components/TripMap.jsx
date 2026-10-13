@@ -16,13 +16,21 @@ function load(tag, attrs, key) {
   return el._p;
 }
 
+// Leaflet takes raw HTML strings for markers and popups, so every user-entered
+// value (trip names, places, URLs) has to be escaped before it goes in.
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
 function pin(label, primary) {
   const dot = primary
     ? "<span style='width:11px;height:11px;border-radius:50%;background:#968ae0;box-shadow:0 0 0 4px rgba(150,138,224,.22),0 0 12px rgba(150,138,224,.7);flex:none'></span>"
     : "<span style='width:7px;height:7px;border-radius:50%;border:1.5px solid #b5abfc;flex:none'></span>";
   const text = "<span class='tm-lbl' style='font:" + (primary ? "500 12px" : "400 10px") +
     "/1 Inter,system-ui,sans-serif;color:" + (primary ? "#e9e9ed" : "#b2b6ca") +
-    ";white-space:nowrap'>" + label + "</span>";
+    ";white-space:nowrap'>" + esc(label) + "</span>";
   return "<div class='tm-pin' style='display:flex;align-items:center;gap:6px;transform:translate(-5px,-5px);" +
     "padding:3px 7px 3px 4px;border-radius:999px;background:rgba(22,24,38,.72);cursor:pointer'>" +
     dot + text + "</div>";
@@ -30,15 +38,15 @@ function pin(label, primary) {
 
 function popup(trip) {
   const cover = trip.coverUrl
-    ? "<img src='" + trip.coverUrl + "' alt='' style='width:100%;height:118px;object-fit:cover'>"
+    ? "<img src='" + esc(trip.coverUrl) + "' alt='' style='width:100%;height:118px;object-fit:cover'>"
     : "<div style='height:118px;background:#292b31'></div>";
   return "<div style='padding:0 0 12px'>" + cover +
     "<div style='padding:10px 12px 0'>" +
     "<div style='font:400 10px/1 Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#968ae0'>" +
-      trip.country + "</div>" +
-    "<div style='font:500 17px/1.2 Inter,sans-serif;margin:5px 0 4px'>" + trip.name + "</div>" +
-    "<div style='font:400 12px/1.4 Inter,sans-serif;color:#9397ab'>" + trip.dateRange + "</div>" +
-    "<a href='" + trip.href + "' style='display:flex;justify-content:center;margin-top:10px;" +
+      esc(trip.country) + "</div>" +
+    "<div style='font:500 17px/1.2 Inter,sans-serif;margin:5px 0 4px'>" + esc(trip.name) + "</div>" +
+    "<div style='font:400 12px/1.4 Inter,sans-serif;color:#9397ab'>" + esc(trip.dateRange) + "</div>" +
+    "<a href='" + esc(trip.href) + "' style='display:flex;justify-content:center;margin-top:10px;" +
     "border:1px solid #968ae0;color:#968ae0;border-radius:8px;padding:7px 10px;" +
     "font:500 13px/1.2 Inter,sans-serif;text-decoration:none'>Open trip</a>" +
     "</div></div>";
@@ -89,6 +97,7 @@ export default function TripMap({ trips, height = 420, only = false, hoverId = "
       map.on("zoomend", zoomClass);
 
       const fit = () => {
+        if (dead) return;
         if (!all.length) return map.setView([20, 10], 2);
         map.invalidateSize();
         map.fitBounds(L.latLngBounds(all).pad(only ? 0.45 : 0.18), { maxZoom: only ? 8 : 5 });

@@ -10,14 +10,18 @@ export async function POST(req) {
     const user = await requireUser();
     const form = await req.formData();
     const pageId = String(form.get("pageId") || "");
-    const page = await db.page.findUnique({ where: { id: pageId }, include: { trip: true } });
-    if (!page || page.trip.userId !== user.id) {
+    const page = await db.page.findUnique({
+      where: { id: pageId },
+      include: { trip: { include: { buddies: { where: { userId: user.id } } } } }
+    });
+    if (!page || (page.trip.userId !== user.id && page.trip.buddies.length === 0)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const out = [];
     let position = await db.photo.count({ where: { pageId } });
     for (const file of form.getAll("photos")) {
-      if (!file || typeof file.arrayBuffer !== "function") continue;
+      if (!file || typeof file.arrayBuffer !== "function" || !file.size) continue;
+      if (!String(file.type || "").startsWith("image/")) continue;
       const url = await saveUpload(file);
       out.push(await db.photo.create({ data: { pageId, url, position: position++ } }));
     }

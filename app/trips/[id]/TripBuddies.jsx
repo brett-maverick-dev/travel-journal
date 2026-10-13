@@ -6,7 +6,15 @@ import { addTripBuddy, removeTripBuddy } from "@/app/actions";
 
 export default function TripBuddies({ tripId, isOwner, companions, available }) {
   const [pending, start] = useTransition();
-  const [selected, setSelected] = useState(available[0]?.id || "");
+  const [picked, setPicked] = useState("");
+  const [error, setError] = useState("");
+  // After an add, that buddy drops out of `available`; fall back to whoever is
+  // first now rather than re-submitting someone who's already on the trip.
+  const selected = available.some((u) => u.id === picked) ? picked : available[0]?.id || "";
+  const run = (fn) => start(async () => {
+    const res = await fn();
+    setError(res?.error || "");
+  });
 
   if (!isOwner && companions.length === 0) return null;
 
@@ -29,7 +37,7 @@ export default function TripBuddies({ tripId, isOwner, companions, available }) 
             {u.name || u.handle}
           </Link>
           {isOwner && (
-            <button disabled={pending} title="Remove" onClick={() => start(() => removeTripBuddy(tripId, u.id))}
+            <button disabled={pending} title="Remove" onClick={() => run(() => removeTripBuddy(tripId, u.id))}
               style={{
                 background: "transparent", border: 0, cursor: "pointer", color: "inherit",
                 display: "grid", placeItems: "center", padding: 0, width: 16, height: 16
@@ -42,17 +50,18 @@ export default function TripBuddies({ tripId, isOwner, companions, available }) 
 
       {isOwner && available.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <select className="input" value={selected} disabled={pending} onChange={(e) => setSelected(e.target.value)}
+          <select className="input" value={selected} disabled={pending} onChange={(e) => setPicked(e.target.value)}
             style={{ fontSize: 12, minHeight: 30, padding: "3px 6px" }}>
             {available.map((u) => <option key={u.id} value={u.id}>{u.name || u.handle}</option>)}
           </select>
           <button className="btn btn-secondary" disabled={pending || !selected}
-            onClick={() => start(() => addTripBuddy(tripId, selected))}
+            onClick={() => run(() => addTripBuddy(tripId, selected))}
             style={{ fontSize: 12, padding: "4px 10px" }}>
             <i className="ph ph-user-plus" />Add
           </button>
         </div>
       )}
+      {error && <span style={{ fontSize: 12, color: "var(--color-accent-300)" }}>{error}</span>}
       {isOwner && companions.length === 0 && available.length === 0 && (
         <Link href="/buddies" className="text-muted" style={{ fontSize: 12 }}>
           Add travel buddies first to share this trip with them.
