@@ -395,3 +395,21 @@ a:hover { color: var(--color-accent-300); }
 .dest-item:hover .dest-action, .dest-item[data-active="1"] .dest-action, .dest-action:focus-visible { opacity: 1; }
 .dest-action:hover { color: var(--color-accent); }
 @media (hover: none) { .dest-action { opacity: 1; } }
+
+/* ── page photos: tiles + enlarged view ─────────────────────────────── */
+.photo-tile { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 8px;
+  background: var(--color-neutral-900); cursor: zoom-in; }
+.photo-tile:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.photo-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0;
+  transition: opacity .16s ease; cursor: default; }
+.photo-actions .btn { width: 30px; height: 30px; background: color-mix(in srgb, var(--color-bg) 72%, transparent); }
+.photo-tile:hover .photo-actions, .photo-tile:focus-within .photo-actions { opacity: 1; }
+@media (hover: none) { .photo-actions { opacity: 1; } }
+
+.lightbox { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: 24px;
+  background: rgba(8, 9, 16, .92); animation: lightbox-in .16s ease both; }
+/* above the photo, which can cover them on narrow screens */
+.lightbox-close { position: absolute; top: 16px; right: 16px; z-index: 1; }
+.lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; z-index: 1; }
+@keyframes lightbox-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lightbox { animation: none; } }

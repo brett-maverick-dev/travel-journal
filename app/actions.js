@@ -814,6 +814,26 @@ export async function setCoverFrame(tripId, frame) {
   return { ok: true };
 }
 
+// field: "caption" (the photo's description) or "rotation" (degrees
+// clockwise; any value is snapped to the nearest quarter turn, 0–270).
+export async function updatePhoto(id, field, value) {
+  const photo = await db.photo.findUnique({ where: { id }, include: { page: true } });
+  if (!photo) throw new Error("NOT_FOUND");
+  await assertOwner(photo.page.tripId);
+  let data;
+  if (field === "caption") {
+    data = { caption: String(value ?? "").trim().slice(0, 2000) };
+  } else if (field === "rotation") {
+    const quarter = Math.round(Number(value) / 90) || 0;
+    data = { rotation: (((quarter % 4) + 4) % 4) * 90 };
+  } else {
+    throw new Error("BAD_FIELD");
+  }
+  await db.photo.update({ where: { id }, data });
+  revalidatePath("/trips/" + photo.page.tripId);
+  revalidatePath("/trips/" + photo.page.tripId + "/pages/" + photo.pageId);
+}
+
 export async function deletePhoto(id) {
   const photo = await db.photo.findUnique({ where: { id }, include: { page: true } });
   if (!photo) return;

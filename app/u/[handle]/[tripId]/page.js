@@ -3,6 +3,7 @@ import Link from "next/link";
 import TripMap from "@/components/TripMap";
 import BuddyActions from "@/app/buddies/BuddyActions";
 import TripJournal from "@/components/TripJournal";
+import Photos from "@/components/Photos";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
 import { currentUser } from "@/lib/session";
@@ -150,10 +151,8 @@ export default async function PublicTrip({ params, searchParams }) {
             <p key={i} style={{ fontSize: 15, lineHeight: 1.65, maxWidth: "68ch" }}>{para}</p>
           ))}
           {p.photos.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 8 }}>
-              {p.photos.map((ph) => (
-                <img key={ph.id} src={ph.url} alt={ph.caption} style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 8 }} />
-              ))}
+            <div style={{ marginTop: 8 }}>
+              <Photos pageId={p.id} photos={p.photos} canEdit={false} />
             </div>
           )}
           {tagList(p.tags).length > 0 && (
@@ -165,9 +164,7 @@ export default async function PublicTrip({ params, searchParams }) {
             <section key={a.id} className="card elev-sm" style={{ padding: 20, marginTop: 20, gap: 10 }}>
               <div className="card-kicker">{[a.time, a.place].filter(Boolean).join(" · ")}</div>
               <h3 style={{ margin: 0 }}>{a.title}</h3>
-              {a.photos.length > 0 && (
-                <img src={a.photos[0].url} alt="" style={{ width: "100%", maxHeight: 340, objectFit: "cover", borderRadius: 8 }} />
-              )}
+              {a.photos.length > 0 && <Photos pageId={a.id} photos={a.photos} canEdit={false} />}
               {a.notes.split("\n").filter(Boolean).map((para, i) => (
                 <p key={i} style={{ fontSize: 15, lineHeight: 1.7, margin: 0 }}>{para}</p>
               ))}

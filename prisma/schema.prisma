@@ -187,6 +187,9 @@ model Photo {
   url      String @db.VarChar(1024)
   caption  String @db.Text // default "" comes from lib/db.js
   position Int    @default(0)
+  // Clockwise turn to display it upright: 0, 90, 180 or 270. Applied when
+  // shown (components/PhotoImage.jsx); the file itself is never re-encoded.
+  rotation Int    @default(0)
 
   @@index([pageId])
 }
