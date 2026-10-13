@@ -19,7 +19,7 @@ export default function DestinationActions({ destinationId, name, canMakeDepartu
         <button type="button" className="btn btn-ghost btn-icon dest-action" disabled={pending}
           title="Make this the departure city"
           onClick={(e) => run(e,
-            "Make " + name + " the departure city? It moves to “Leaving from” and its blank pages are removed — pages you've written in stay.",
+            "Make " + name + " the departure city? It moves to “Leaving from”, and its pages become the departure's pages.",
             makeDeparture)}>
           <i className="ph ph-house-line" />
         </button>

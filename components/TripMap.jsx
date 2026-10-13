@@ -72,11 +72,14 @@ function layout(stops) {
 
 // variant: "primary" (the trip's first destination, labelled with the trip
 // name), "stop" (later destinations), or one of the journey-there stops:
-// "departure" (where the trip starts), "layover", "arrival" (where it lands).
+// "departure" (where the trip starts), "layover", "arrival" (where it lands),
+// and on the way home "return" (where that journey leaves) and "home".
 const GLYPH = {
   departure: "ph-house-line",
   layover: "ph-arrows-clockwise",
-  arrival: "ph-airplane-landing"
+  arrival: "ph-airplane-landing",
+  return: "ph-airplane-takeoff",
+  home: "ph-house-line"
 };
 
 function pin(label, variant) {

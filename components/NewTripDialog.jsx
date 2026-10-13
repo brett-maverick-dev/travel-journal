@@ -8,6 +8,8 @@ export default function NewTripDialog() {
   const [open, setOpen] = useState(false);
   const [stops, setStops] = useState([0, 1]);
   const [layovers, setLayovers] = useState([]); // row keys, like `stops`
+  const [returnLayovers, setReturnLayovers] = useState([]);
+  const nextKey = (keys) => (keys.length ? Math.max(...keys) + 1 : 0);
   const [state, action, pending] = useActionState(createTrip, null);
 
   return (
@@ -73,7 +75,7 @@ export default function NewTripDialog() {
                 </div>
               ))}
               <button type="button" className="btn btn-secondary" style={{ alignSelf: "flex-start" }}
-                onClick={() => setLayovers((l) => [...l, l.length ? Math.max(...l) + 1 : 0])}>
+                onClick={() => setLayovers((l) => [...l, nextKey(l)])}>
                 <i className="ph ph-plus" />Add layover
               </button>
               <div className="field">
@@ -115,6 +117,44 @@ export default function NewTripDialog() {
                 Place names are geocoded on save so they land on the map.
               </p>
             </div>
+
+            <h6 className="text-muted" style={{ margin: "8px 0 0" }}>Return</h6>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 150px", gap: 8 }}>
+              <div className="field">
+                <label htmlFor="nt-ret-from">Departing from</label>
+                <input className="input" id="nt-ret-from" name="returnFromCity" placeholder="City or airport, e.g. KIX" />
+              </div>
+              <div className="field">
+                <label htmlFor="nt-ret-date">Return date</label>
+                <input className="input" id="nt-ret-date" name="returnDate" type="date" />
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {returnLayovers.map((key, i) => (
+                <div key={key} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8, alignItems: "end" }}>
+                  <div className="field">
+                    <label htmlFor={"nt-ret-layover-" + key}>Layover {returnLayovers.length > 1 ? i + 1 : ""}</label>
+                    <input className="input" id={"nt-ret-layover-" + key} name="returnLayover" placeholder="City or airport, e.g. HNL" />
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-icon" aria-label="Remove layover"
+                    onClick={() => setReturnLayovers((l) => l.filter((k) => k !== key))}>
+                    <i className="ph ph-x" />
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="btn btn-secondary" style={{ alignSelf: "flex-start" }}
+                onClick={() => setReturnLayovers((l) => [...l, nextKey(l)])}>
+                <i className="ph ph-plus" />Add layover
+              </button>
+              <div className="field">
+                <label htmlFor="nt-ret-to">Arriving home at</label>
+                <input className="input" id="nt-ret-to" name="returnToCity" placeholder="Leave blank to return where you left from" />
+              </div>
+            </div>
+            <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>
+              Optional — the journey home gets its own page and is drawn on the map. Leave
+              "Departing from" blank to leave from your last destination.
+            </p>
 
             {state?.error && <p style={{ margin: 0, fontSize: 13, color: "var(--color-accent-300)" }}>{state.error}</p>}
             <div className="dialog-actions">

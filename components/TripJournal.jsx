@@ -9,16 +9,16 @@ import { useEffect, useRef, useState, useTransition } from "react";
 // editors bound to server actions) and passed in as nodes keyed by id — this
 // component only decides which of them is showing.
 //
-//   destinations: [{ id, name, dates, connector, row }]   connector/row: nodes
+//   destinations: [{ id, name, dates, connector, row, addLabel?, emptyHint? }]
+//                 in list order — the journey there ("departure") and home
+//                 ("return") are items too. connector (drawn above the item,
+//                 or null) and row are nodes.
 //   groups:       { [destId]: [pageId, …] }               in display order
 //   pages:        { [pageId]: { label, title, panel } }   panel: node
 //   addPage:      optional server action (destId) => new page id
-//   departure:    optional "Leaving from" node above the list; with
-//                 departureSet, the first destination's connector (its
-//                 "Getting there") is drawn too, as the leg from there
 export default function TripJournal({
   map, destinations, groups, pages, initialDestId, initialPageId,
-  addDestination, addPage, emptyHint, stickyTop = 86, departure, departureSet
+  addDestination, addPage, emptyHint, stickyTop = 86
 }) {
   const [sel, setSel] = useState(() => ({
     destId: initialDestId,
@@ -124,13 +124,13 @@ export default function TripJournal({
 
         <div>
           <h6 className="text-muted" style={{ margin: "0 0 12px" }}>Destinations</h6>
-          {departure}
-          {destinations.map((d, i) => {
+          {destinations.map((d) => {
             const count = groups[d.id]?.length || 0;
             const active = d.id === destId;
             return (
               <div key={d.id}>
-                {(i > 0 || departureSet) && d.connector}
+                {d.id === "return" && addDestination /* new destinations go before the trip home */}
+                {d.connector}
                 <div className="dest-item" data-active={active ? "1" : "0"} onClick={() => pickDestination(d.id)}>
                   {d.row}
                   <button type="button" className="dest-open" aria-current={active ? "true" : undefined}
@@ -142,7 +142,7 @@ export default function TripJournal({
               </div>
             );
           })}
-          {addDestination}
+          {!destinations.some((d) => d.id === "return") && addDestination}
         </div>
       </div>
 
@@ -196,7 +196,7 @@ export default function TripJournal({
               </div>
             ) : (
               <p className="text-muted" style={{ fontSize: 14, margin: 0 }}>
-                {emptyHint || "No pages here yet."}
+                {dest.emptyHint || emptyHint || "No pages here yet."}
               </p>
             )}
 
@@ -204,7 +204,7 @@ export default function TripJournal({
               <button className="dashed" disabled={adding} onClick={onAddPage}
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: 16, fontSize: 13 }}>
                 <i className={adding ? "ph ph-circle-notch" : "ph ph-plus"} />
-                {adding ? "Adding…" : "Add a page to " + dest.name}
+                {adding ? "Adding…" : dest.addLabel || "Add a page to " + dest.name}
               </button>
             )}
           </>

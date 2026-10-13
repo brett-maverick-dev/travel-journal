@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
 import { currentUser } from "@/lib/session";
 import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON, mapStops } from "@/lib/format";
-import { groupPagesByDestination, initialDestination, OTHER_GROUP } from "@/lib/pages";
+import { groupPagesByDestination, initialDestination, OTHER_GROUP, DEPARTURE_GROUP, RETURN_GROUP } from "@/lib/pages";
 
 export async function generateMetadata({ params }) {
   const { tripId } = await params;
@@ -43,13 +43,31 @@ export default async function PublicTrip({ params, searchParams }) {
   }
 
   const days = trip.pages.filter((p) => p.kind === "DAY");
-  const { groups, other } = groupPagesByDestination(trip.destinations, days);
+  const { groups, other, departure: departurePages, ret: returnPages } = groupPagesByDestination(trip.destinations, days);
+  const via = (leg) => trip.layovers.filter((l) => (l.leg || "DEPARTURE") === leg && l.name).map((l) => l.name).join(", ");
+  const hasDeparture = Boolean(trip.departureCity || trip.arrivalCity || departurePages.length);
+  const hasReturn = Boolean(trip.returnFromCity || trip.returnToCity || trip.returnDate || returnPages.length);
 
-  const journalDestinations = trip.destinations.map((d) => ({
+  // Read-only summary of a journey there or home, as a list item's row.
+  const journeyRow = (icon, title, lines) => (
+    <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12, paddingTop: 8 }}>
+      <div style={{ display: "flex", justifyContent: "center", paddingTop: 3 }}>
+        <i className={"ph " + icon} style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 16 }}>{title}</div>
+        {lines.filter(Boolean).map((line, i) => (
+          <div key={i} className="text-muted" style={{ fontSize: 12 }}>{line}</div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const destinationItems = trip.destinations.map((d, i) => ({
     id: d.id,
     name: d.name,
     dates: fmt(d.arrive) + " – " + fmt(d.depart) + " · " + nights(d.arrive, d.depart),
-    connector: (
+    connector: i === 0 && !hasDeparture ? null : (
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--color-neutral-400)", padding: "4px 0 6px 36px" }}>
         <i className={"ph " + (TRANSPORT_ICON[d.transport] || "ph-path")} style={{ fontSize: 15, color: "var(--color-accent)" }} />
         <span>{d.transport}{d.detail ? " · " + d.detail : ""}</span>
@@ -65,6 +83,21 @@ export default async function PublicTrip({ params, searchParams }) {
       </div>
     )
   }));
+  const departureTitle = trip.departureCity ? "Leaving " + trip.departureCity : "The journey there";
+  const journalDestinations = [
+    ...(hasDeparture ? [{
+      id: DEPARTURE_GROUP,
+      name: departureTitle,
+      dates: trip.departureDate ? fmt(trip.departureDate) + " · the journey there" : "The journey there",
+      connector: null,
+      row: journeyRow("ph-house-line", departureTitle, [
+        trip.departureDate && fmt(trip.departureDate),
+        via("DEPARTURE") && "via " + via("DEPARTURE"),
+        trip.arrivalCity && "arriving at " + trip.arrivalCity
+      ])
+    }] : []),
+    ...destinationItems
+  ];
   if (other.length) {
     journalDestinations.push({
       id: OTHER_GROUP, name: "More pages", dates: "", connector: null,
@@ -76,9 +109,28 @@ export default async function PublicTrip({ params, searchParams }) {
       )
     });
   }
+  const homeTo = trip.returnToCity || trip.departureCity;
+  const returnTitle = homeTo ? "Home to " + homeTo : "The journey home";
+  if (hasReturn) {
+    journalDestinations.push({
+      id: RETURN_GROUP,
+      name: returnTitle,
+      dates: trip.returnDate ? fmt(trip.returnDate) + " · the journey home" : "The journey home",
+      connector: null,
+      row: journeyRow("ph-airplane-takeoff", returnTitle, [
+        trip.returnDate && fmt(trip.returnDate),
+        trip.returnFromCity && "from " + trip.returnFromCity,
+        via("RETURN") && "via " + via("RETURN")
+      ])
+    });
+  }
   const journalGroups = Object.fromEntries(
-    [...groups.entries(), ...(other.length ? [[OTHER_GROUP, other]] : [])]
-      .map(([destId, list]) => [destId, list.map((p) => p.id)])
+    [
+      ...(hasDeparture ? [[DEPARTURE_GROUP, departurePages]] : []),
+      ...groups.entries(),
+      ...(other.length ? [[OTHER_GROUP, other]] : []),
+      ...(hasReturn ? [[RETURN_GROUP, returnPages]] : [])
+    ].map(([destId, list]) => [destId, list.map((p) => p.id)])
   );
   const groupOf = (pageId) => Object.keys(journalGroups).find((k) => journalGroups[k].includes(pageId));
   const initialDestId = groupOf(wantPage) ||
@@ -159,28 +211,6 @@ export default async function PublicTrip({ params, searchParams }) {
         initialDestId={initialDestId}
         initialPageId={groupOf(wantPage) ? wantPage : null}
         emptyHint="Nothing written for this stop yet."
-        departureSet={Boolean(trip.departureCity || trip.arrivalCity)}
-        departure={trip.departureCity || trip.arrivalCity ? (
-          <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12 }}>
-            <div style={{ display: "flex", justifyContent: "center", paddingTop: 2 }}>
-              <i className="ph ph-house-line" style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
-            </div>
-            <div className="text-muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
-              {trip.departureCity && (
-                <div>
-                  Leaving from <span style={{ color: "var(--color-text)" }}>{trip.departureCity}</span>
-                  {trip.departureDate ? " · " + fmt(trip.departureDate) : ""}
-                </div>
-              )}
-              {trip.layovers.filter((l) => l.name).length > 0 && (
-                <div>via <span style={{ color: "var(--color-text)" }}>{trip.layovers.filter((l) => l.name).map((l) => l.name).join(", ")}</span></div>
-              )}
-              {trip.arrivalCity && (
-                <div>arriving at <span style={{ color: "var(--color-text)" }}>{trip.arrivalCity}</span></div>
-              )}
-            </div>
-          </div>
-        ) : null}
         stickyTop={30}
       />
       <p className="text-muted page-shell" style={{ fontSize: 12, paddingTop: 0 }}>

@@ -1,0 +1,14 @@
+-- AlterTable
+ALTER TABLE `Layover` ADD COLUMN `leg` VARCHAR(16) NOT NULL DEFAULT 'DEPARTURE';
+
+-- AlterTable
+ALTER TABLE `Page` ADD COLUMN `leg` VARCHAR(16) NULL;
+
+-- AlterTable
+ALTER TABLE `Trip` ADD COLUMN `returnDate` DATETIME(3) NULL,
+    ADD COLUMN `returnFromCity` VARCHAR(500) NOT NULL DEFAULT '',
+    ADD COLUMN `returnFromLat` DOUBLE NULL,
+    ADD COLUMN `returnFromLng` DOUBLE NULL,
+    ADD COLUMN `returnToCity` VARCHAR(500) NOT NULL DEFAULT '',
+    ADD COLUMN `returnToLat` DOUBLE NULL,
+    ADD COLUMN `returnToLng` DOUBLE NULL;

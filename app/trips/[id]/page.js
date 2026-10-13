@@ -16,9 +16,9 @@ import TripJournal from "@/components/TripJournal";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
-import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture, updateArrival, addLayover, updateLayover } from "@/app/actions";
+import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture, updateArrival, addLayover, updateLayover, updateReturn } from "@/app/actions";
 import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON, mapStops } from "@/lib/format";
-import { groupPagesByDestination, initialDestination, OTHER_GROUP } from "@/lib/pages";
+import { groupPagesByDestination, initialDestination, OTHER_GROUP, DEPARTURE_GROUP, RETURN_GROUP } from "@/lib/pages";
 
 export default async function TripPage({ params, searchParams }) {
   const { id } = await params;
@@ -54,10 +54,31 @@ export default async function TripPage({ params, searchParams }) {
 
   const days = trip.pages.filter((p) => p.kind === "DAY");
   const activitiesFor = (dayId) => trip.pages.filter((p) => p.kind === "ACTIVITY" && p.parentId === dayId);
-  const { groups, other } = groupPagesByDestination(trip.destinations, days);
+  const { groups, other, departure: departurePages, ret: returnPages } = groupPagesByDestination(trip.destinations, days);
+  const departureLayovers = trip.layovers.filter((l) => l.leg !== "RETURN");
+  const returnLayovers = trip.layovers.filter((l) => l.leg === "RETURN");
+  const hasDeparture = Boolean(trip.departureCity || trip.arrivalCity || departureLayovers.length);
+  const hasReturn = Boolean(trip.returnFromCity || trip.returnToCity || trip.returnDate || returnLayovers.length);
 
-  const departure = (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+  const layoverRows = (list, leg) => (
+    <>
+      {list.map((l, i) => (
+        <JourneyStop key={l.id} icon="ph-arrows-clockwise" label={"Layover" + (list.length > 1 ? " " + (i + 1) : "")}
+          notFound={l.name && l.lat == null}>
+          <Field value={l.name} placeholder="City or airport, e.g. LAX" save={updateLayover.bind(null, l.id)}
+            style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+          <RemoveLayoverButton layoverId={l.id} />
+        </JourneyStop>
+      ))}
+      <div style={{ paddingLeft: 36 }}>
+        <AddButton action={addLayover.bind(null, trip.id, leg)} label="Add layover"
+          style={{ border: 0, justifyContent: "flex-start", padding: 4, fontSize: 11 }} />
+      </div>
+    </>
+  );
+
+  const departureRow = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingBottom: 4 }}>
       <JourneyStop icon="ph-house-line" label="Leaving from">
         <Field value={trip.departureCity} placeholder="Home city (optional)" save={updateDeparture.bind(null, trip.id, "city")}
           style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
@@ -67,20 +88,9 @@ export default async function TripPage({ params, searchParams }) {
             style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
         )}
       </JourneyStop>
-      {(trip.departureCity || trip.layovers.length > 0 || trip.arrivalCity) && (
+      {hasDeparture && (
         <>
-          {trip.layovers.map((l, i) => (
-            <JourneyStop key={l.id} icon="ph-arrows-clockwise" label={"Layover" + (trip.layovers.length > 1 ? " " + (i + 1) : "")}
-              notFound={l.name && l.lat == null}>
-              <Field value={l.name} placeholder="City or airport, e.g. LAX" save={updateLayover.bind(null, l.id)}
-                style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
-              <RemoveLayoverButton layoverId={l.id} />
-            </JourneyStop>
-          ))}
-          <div style={{ paddingLeft: 36 }}>
-            <AddButton action={addLayover.bind(null, trip.id)} label="Add layover"
-              style={{ border: 0, justifyContent: "flex-start", padding: 4, fontSize: 11 }} />
-          </div>
+          {layoverRows(departureLayovers, "DEPARTURE")}
           <JourneyStop icon="ph-airplane-landing" label="Arriving at" notFound={trip.arrivalCity && trip.arrivalLat == null}>
             <Field value={trip.arrivalCity} placeholder="City or airport, e.g. NRT" save={updateArrival.bind(null, trip.id)}
               style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
@@ -90,11 +100,35 @@ export default async function TripPage({ params, searchParams }) {
     </div>
   );
 
-  const journalDestinations = trip.destinations.map((d, i) => ({
+  const returnRow = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingBottom: 4 }}>
+      <JourneyStop icon="ph-airplane-takeoff" label="Return — departing from"
+        notFound={trip.returnFromCity && trip.returnFromLat == null}>
+        <Field value={trip.returnFromCity} placeholder="City or airport (optional)" save={updateReturn.bind(null, trip.id, "from")}
+          style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+        <Field type="date" value={trip.returnDate ? inputDate(trip.returnDate) : ""}
+          save={updateReturn.bind(null, trip.id, "date")}
+          style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
+      </JourneyStop>
+      {hasReturn && (
+        <>
+          {layoverRows(returnLayovers, "RETURN")}
+          <JourneyStop icon="ph-house-line" label="Arriving home at" notFound={trip.returnToCity && trip.returnToLat == null}>
+            <Field value={trip.returnToCity} placeholder={trip.departureCity || "Home city"} save={updateReturn.bind(null, trip.id, "to")}
+              style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+          </JourneyStop>
+        </>
+      )}
+    </div>
+  );
+
+  const destinationItems = trip.destinations.map((d, i) => ({
     id: d.id,
     name: d.name,
     dates: fmt(d.arrive) + " – " + fmt(d.depart) + " · " + nights(d.arrive, d.depart),
-    connector: (
+    // Its "Getting there" — drawn above it, from the previous stop (or from
+    // the journey there, for the first destination when there is one).
+    connector: i === 0 && !hasDeparture ? null : (
       <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12, alignItems: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", height: 38 }}>
           <span style={{ width: 1, height: "100%", background: "var(--color-divider)" }} />
@@ -133,6 +167,18 @@ export default async function TripPage({ params, searchParams }) {
       </div>
     )
   }));
+  const journalDestinations = [
+    {
+      id: DEPARTURE_GROUP,
+      name: trip.departureCity ? "Leaving " + trip.departureCity : "Leaving from",
+      dates: trip.departureDate ? fmt(trip.departureDate) + " · the journey there" : "The journey there",
+      connector: null,
+      row: departureRow,
+      addLabel: "Add a departure page",
+      emptyHint: "No departure page yet."
+    },
+    ...destinationItems
+  ];
   if (other.length) {
     journalDestinations.push({
       id: OTHER_GROUP,
@@ -147,15 +193,36 @@ export default async function TripPage({ params, searchParams }) {
       )
     });
   }
+  journalDestinations.push({
+    id: RETURN_GROUP,
+    name: hasReturn && (trip.returnToCity || trip.departureCity)
+      ? "Home to " + (trip.returnToCity || trip.departureCity) : "Return",
+    dates: trip.returnDate ? fmt(trip.returnDate) + " · the journey home" : "The journey home",
+    connector: (
+      <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12, alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "center", height: 26 }}>
+          <span style={{ width: 1, height: "100%", background: "var(--color-divider)" }} />
+        </div>
+        <span />
+      </div>
+    ),
+    row: returnRow,
+    addLabel: "Add a return page",
+    emptyHint: "No return page yet."
+  });
 
   const journalGroups = Object.fromEntries(
-    [...groups.entries(), ...(other.length ? [[OTHER_GROUP, other]] : [])]
-      .map(([destId, list]) => [destId, list.map((p) => p.id)])
+    [
+      [DEPARTURE_GROUP, departurePages],
+      ...groups.entries(),
+      ...(other.length ? [[OTHER_GROUP, other]] : []),
+      [RETURN_GROUP, returnPages]
+    ].map(([destId, list]) => [destId, list.map((p) => p.id)])
   );
   const groupOf = (pageId) => Object.keys(journalGroups).find((k) => journalGroups[k].includes(pageId));
   const initialDestId = groupOf(wantPage) ||
     (journalGroups[wantDest] ? wantDest : initialDestination(trip.destinations, groups)) ||
-    (other.length ? OTHER_GROUP : null);
+    (other.length ? OTHER_GROUP : DEPARTURE_GROUP);
   const initialPageId = groupOf(wantPage) ? wantPage : null;
 
   const journalPages = Object.fromEntries(days.map((p) => [p.id, {
@@ -265,8 +332,6 @@ export default async function TripPage({ params, searchParams }) {
         initialDestId={initialDestId}
         initialPageId={initialPageId}
         addPage={addDayPage.bind(null, trip.id)}
-        departure={departure}
-        departureSet={Boolean(trip.departureCity || trip.arrivalCity)}
         emptyHint="No pages for this destination yet."
         addDestination={
           <AddButton action={addDestination.bind(null, trip.id)} label="Add destination"

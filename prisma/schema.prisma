@@ -81,6 +81,16 @@ model Trip {
   arrivalCity   String       @default("") @db.VarChar(500)
   arrivalLat    Float?
   arrivalLng    Float?
+  // The journey home at the end of the trip, mirroring the departure:
+  // where it leaves from (a city or airport, e.g. "KIX"; blank = the last
+  // destination), when, and where it lands (blank = the departure city).
+  returnDate     DateTime?
+  returnFromCity String     @default("") @db.VarChar(500)
+  returnFromLat  Float?
+  returnFromLng  Float?
+  returnToCity   String     @default("") @db.VarChar(500)
+  returnToLat    Float?
+  returnToLng    Float?
   layovers      Layover[]
   createdAt    DateTime      @default(now())
   destinations Destination[]
@@ -107,12 +117,14 @@ model TripBuddy {
   @@index([userId])
 }
 
-// A stop on the way from the departure city to the arrival — drawn on the
-// map's route, in position order, but with no pages of its own.
+// A stop on the journey there (leg DEPARTURE: departure city → arrival) or
+// home (leg RETURN) — drawn on the map's route, in position order, but with
+// no pages of its own.
 model Layover {
   id       String @id @default(cuid())
   tripId   String
   trip     Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  leg      String @default("DEPARTURE") @db.VarChar(16) // DEPARTURE | RETURN
   name     String @db.VarChar(500) // a city or airport, e.g. "LAX"
   lat      Float?
   lng      Float?
@@ -142,6 +154,9 @@ model Page {
   tripId   String
   trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   kind     String   @default("DAY") // DAY | ACTIVITY
+  // Set on the day pages for the journey there (DEPARTURE) or home (RETURN),
+  // which are grouped under "Leaving from" / "Return" instead of a destination.
+  leg      String?  @db.VarChar(16)
   parentId String? // set on ACTIVITY pages: the day they belong to
   title    String   @default("Untitled page") @db.VarChar(500)
   date     DateTime

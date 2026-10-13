@@ -273,6 +273,35 @@ export async function setAvatar(_prev, form) {
 
 /* ── trips ────────────────────────────────────────────────────────── */
 
+// A day page for the journey there (DEPARTURE) or home (RETURN), grouped
+// under "Leaving from" / "Return" rather than a destination. Dated the
+// departure/return date (falling back to the trip's first/last day), or the
+// day after the leg's last page when it already has some.
+async function createJourneyPage(trip, leg, existing = []) {
+  const base = leg === "DEPARTURE" ? (trip.departureDate || trip.startDate) : (trip.returnDate || trip.endDate);
+  const last = existing.length ? Math.max(...existing.map((p) => new Date(p.date).getTime())) : null;
+  const date = last != null ? new Date(last + 86400000) : new Date(base);
+  const place = leg === "DEPARTURE" ? trip.departureCity : trip.returnToCity || trip.departureCity;
+  return db.page.create({
+    data: { tripId: trip.id, kind: "DAY", leg, position: 0, title: "", date, place: place || "" }
+  });
+}
+
+// For trips that gain a departure or return after they were created: give
+// that leg its page, once.
+async function ensureJourneyPage(tripId, leg) {
+  const trip = await db.trip.findUnique({ where: { id: tripId } });
+  if (!trip) return;
+  const has = await db.page.count({ where: { tripId, kind: "DAY", leg } });
+  if (!has) await createJourneyPage(trip, leg);
+}
+
+// When a leg's date changes and it has exactly one page, move that page too.
+async function moveJourneyPage(tripId, leg, date) {
+  const pages = await db.page.findMany({ where: { tripId, kind: "DAY", leg } });
+  if (pages.length === 1) await db.page.update({ where: { id: pages[0].id }, data: { date } });
+}
+
 export async function createTrip(_prev, form) {
   const user = await requireUser();
   const name = String(form.get("name") || "").trim() || "Untitled trip";
@@ -305,21 +334,43 @@ export async function createTrip(_prev, form) {
   const arrivalCity = String(form.get("arrivalCity") || "").trim();
   const arrivalCoords = arrivalCity ? await geocodeStop(arrivalCity) : null;
 
+  // The journey home, mirroring the above. "Arriving home at" left blank
+  // means back where the trip started.
+  const returnFromCity = String(form.get("returnFromCity") || "").trim();
+  const returnDate = parseDate(form.get("returnDate"));
+  const returnLayoverNames = form.getAll("returnLayover").map((v) => String(v).trim()).filter(Boolean);
+  const typedReturnTo = String(form.get("returnToCity") || "").trim();
+  const hasReturn = Boolean(returnFromCity || returnDate || returnLayoverNames.length || typedReturnTo);
+  const returnToCity = typedReturnTo || (hasReturn ? departureCity : "");
+  const returnFromCoords = returnFromCity ? await geocodeStop(returnFromCity) : null;
+  const returnToCoords = !returnToCity ? null
+    : returnToCity === departureCity ? departureCoords : await geocode(returnToCity);
+
   const trip = await db.trip.create({
     data: {
       userId: user.id, name, startDate, endDate, visibility, country: places[0] || "",
       departureCity, departureDate,
       departureLat: departureCoords?.lat ?? null, departureLng: departureCoords?.lng ?? null,
-      arrivalCity, arrivalLat: arrivalCoords?.lat ?? null, arrivalLng: arrivalCoords?.lng ?? null
+      arrivalCity, arrivalLat: arrivalCoords?.lat ?? null, arrivalLng: arrivalCoords?.lng ?? null,
+      returnDate, returnFromCity, returnToCity,
+      returnFromLat: returnFromCoords?.lat ?? null, returnFromLng: returnFromCoords?.lng ?? null,
+      returnToLat: returnToCoords?.lat ?? null, returnToLng: returnToCoords?.lng ?? null
     }
   });
 
-  for (let i = 0; i < layoverNames.length; i++) {
-    const coords = await geocodeStop(layoverNames[i]);
-    await db.layover.create({
-      data: { tripId: trip.id, name: layoverNames[i], position: i, lat: coords?.lat ?? null, lng: coords?.lng ?? null }
-    });
+  const legs = [["DEPARTURE", layoverNames], ["RETURN", returnLayoverNames]];
+  for (const [leg, names] of legs) {
+    for (let i = 0; i < names.length; i++) {
+      const coords = await geocodeStop(names[i]);
+      await db.layover.create({
+        data: { tripId: trip.id, leg, name: names[i], position: i, lat: coords?.lat ?? null, lng: coords?.lng ?? null }
+      });
+    }
   }
+
+  // A page each for the journey there and home, alongside the day pages.
+  if (departureCity) await createJourneyPage(trip, "DEPARTURE");
+  if (hasReturn) await createJourneyPage(trip, "RETURN");
 
   const destinations = [];
   for (let i = 0; i < places.length; i++) {
@@ -463,10 +514,12 @@ export async function updateDeparture(tripId, field, value) {
     const date = parseDate(value);
     if (!date) return { error: "Pick a date." };
     data = { departureDate: date };
+    await moveJourneyPage(tripId, "DEPARTURE", date);
   } else {
     throw new Error("BAD_FIELD");
   }
   await db.trip.update({ where: { id: tripId }, data });
+  if (data.departureCity) await ensureJourneyPage(tripId, "DEPARTURE");
   revalidatePath("/trips/" + tripId);
   revalidatePath("/trips");
 }
@@ -483,10 +536,35 @@ export async function updateArrival(tripId, value) {
   revalidatePath("/trips");
 }
 
-export async function addLayover(tripId) {
+// field: "from" (where the journey home leaves — a city or airport),
+// "to" (where it lands) or "date".
+export async function updateReturn(tripId, field, value) {
   await assertOwner(tripId);
-  const last = await db.layover.findFirst({ where: { tripId }, orderBy: { position: "desc" } });
-  await db.layover.create({ data: { tripId, name: "", position: (last?.position ?? -1) + 1 } });
+  let data;
+  if (field === "from" || field === "to") {
+    const city = String(value || "").trim();
+    const coords = !city ? null : field === "from" ? await geocodeStop(city) : await geocode(city);
+    const key = field === "from" ? "returnFrom" : "returnTo";
+    data = { [key + "City"]: city, [key + "Lat"]: coords?.lat ?? null, [key + "Lng"]: coords?.lng ?? null };
+  } else if (field === "date") {
+    const date = parseDate(value);
+    if (!date) return { error: "Pick a date." };
+    data = { returnDate: date };
+    await moveJourneyPage(tripId, "RETURN", date);
+  } else {
+    throw new Error("BAD_FIELD");
+  }
+  await db.trip.update({ where: { id: tripId }, data });
+  if (Object.values(data).some((v) => v)) await ensureJourneyPage(tripId, "RETURN");
+  revalidatePath("/trips/" + tripId);
+  revalidatePath("/trips");
+}
+
+export async function addLayover(tripId, leg = "DEPARTURE") {
+  if (leg !== "DEPARTURE" && leg !== "RETURN") throw new Error("BAD_LEG");
+  await assertOwner(tripId);
+  const last = await db.layover.findFirst({ where: { tripId, leg }, orderBy: { position: "desc" } });
+  await db.layover.create({ data: { tripId, leg, name: "", position: (last?.position ?? -1) + 1 } });
   revalidatePath("/trips/" + tripId);
 }
 
@@ -559,10 +637,21 @@ export async function makeDeparture(id) {
     where: { id: dest.tripId },
     data: { departureCity: dest.name, departureDate: dest.arrive, departureLat: dest.lat, departureLng: dest.lng }
   });
-  const result = await removeDestinationAndBlankPages(dest);
+  // Its pages were the days spent leaving home — keep them, as the
+  // departure's pages.
+  const [destinations, dayPages] = await Promise.all([
+    db.destination.findMany({ where: { tripId: dest.tripId }, orderBy: { position: "asc" } }),
+    db.page.findMany({ where: { tripId: dest.tripId, kind: "DAY" } })
+  ]);
+  const mine = groupPagesByDestination(destinations, dayPages).groups.get(dest.id) || [];
+  await db.$transaction([
+    db.page.updateMany({ where: { id: { in: mine.map((p) => p.id) } }, data: { leg: "DEPARTURE" } }),
+    db.destination.delete({ where: { id: dest.id } })
+  ]);
+  await ensureJourneyPage(dest.tripId, "DEPARTURE");
   revalidatePath("/trips/" + dest.tripId);
   revalidatePath("/trips");
-  return { ok: true, ...result };
+  return { ok: true, movedPages: mine.length };
 }
 
 /* ── pages ────────────────────────────────────────────────────────── */
@@ -578,6 +667,15 @@ export async function addDayPage(tripId, destinationId) {
     db.destination.findMany({ where: { tripId }, orderBy: { position: "asc" } })
   ]);
   const position = dayPages.length;
+
+  // The carousel's "Add a page" while Leaving from / Return is selected.
+  const leg = destinationId === "departure" ? "DEPARTURE" : destinationId === "return" ? "RETURN" : null;
+  if (leg) {
+    const page = await createJourneyPage(trip, leg, dayPages.filter((p) => p.leg === leg));
+    revalidatePath("/trips/" + tripId);
+    return page.id;
+  }
+
   const dest = destinationId ? destinations.find((d) => d.id === destinationId) : null;
 
   let date, place;

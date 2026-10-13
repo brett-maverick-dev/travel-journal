@@ -76,7 +76,7 @@ export default function TripBrowser({ trips }) {
               <div className="card-title" style={{ fontSize: 19 }}>{t.name}</div>
               <div className="text-muted" style={{ fontSize: 12 }}>{t.dateRange}</div>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, fontSize: 12, color: "var(--color-neutral-400)", marginTop: 2 }}>
-                {t.stops.filter((s) => s.kind !== "layover" && s.kind !== "arrival").map((s, i) => (
+                {t.stops.filter((s) => !s.kind || s.kind === "departure").map((s, i) => (
                   <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
                     {i > 0 && <i className={"ph " + s.icon} style={{ color: "var(--color-accent-400)", fontSize: 14 }} />}
                     <span>{s.name}</span>
