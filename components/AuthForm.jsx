@@ -11,7 +11,7 @@ export default function AuthForm({ action, submitLabel, children, hint }) {
         <p style={{ margin: 0, fontSize: 13, color: "var(--color-accent-300)" }}>{state.error}</p>
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
-        <button className="btn btn-primary" type="submit" disabled={pending}>
+        <button className="btn btn-primary" type="submit" disabled={pending} style={{ whiteSpace: "nowrap", flex: "none" }}>
           {pending ? "Working…" : submitLabel}<i className="ph ph-arrow-right" />
         </button>
         {hint && <span className="text-muted" style={{ fontSize: 12 }}>{hint}</span>}

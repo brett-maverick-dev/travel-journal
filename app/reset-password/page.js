@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AuthForm from "@/components/AuthForm";
+import PasswordFields from "@/components/PasswordFields";
 import { resetPassword } from "@/app/actions";
 
 export default async function ResetPassword({ searchParams }) {
@@ -21,11 +22,7 @@ export default async function ResetPassword({ searchParams }) {
               placeholder="······" required
               style={{ letterSpacing: "0.5em", fontSize: 18, minHeight: 44 }} />
           </div>
-          <div className="field">
-            <label htmlFor="password">New password</label>
-            <input className="input" id="password" name="password" type="password" required minLength={10}
-              placeholder="At least 10 characters" />
-          </div>
+          <PasswordFields label="New password" />
         </AuthForm>
         <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>
           No SMTP configured? The code is printed in the server console.

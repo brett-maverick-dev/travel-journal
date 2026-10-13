@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
+import PasswordFields from "@/components/PasswordFields";
 import TripMap from "@/components/TripMap";
 import { signUp } from "@/app/actions";
 import { currentUser } from "@/lib/session";
@@ -55,10 +56,7 @@ export default async function Home() {
             <label htmlFor="email">Email</label>
             <input className="input" id="email" name="email" type="email" placeholder="you@example.com" required />
           </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input className="input" id="password" name="password" type="password" placeholder="At least 10 characters" required minLength={10} />
-          </div>
+          <PasswordFields />
         </AuthForm>
         <div className="text-muted" style={{ fontSize: 13, marginTop: 14 }}>
           Already have an account? <Link href="/signin">Sign in</Link>

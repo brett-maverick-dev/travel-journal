@@ -9,7 +9,7 @@ import { createSession, destroySession, currentUser, requireUser, isAdminUser } 
 import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
 import { saveUpload } from "@/lib/storage";
 import { geocode, geocodeStop } from "@/lib/geo";
-import { snapshotDatabase } from "@/lib/backup";
+import { snapshotDatabase, deleteBackup } from "@/lib/backup";
 import { groupPagesByDestination } from "@/lib/pages";
 
 const code6 = () => String(randomInt(100000, 1000000));
@@ -96,6 +96,7 @@ export async function signUp(_prev, form) {
   const password = String(form.get("password") || "");
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "Enter a valid email address." };
   if (password.length < 10) return { error: "Use at least 10 characters." };
+  if (password !== String(form.get("confirmPassword") ?? "")) return { error: "The passwords don't match." };
 
   const existing = await db.user.findUnique({ where: { email } });
   if (existing && existing.verified) return { error: "That email already has an account." };
@@ -188,6 +189,7 @@ export async function resetPassword(_prev, form) {
   const code = String(form.get("code") || "").trim();
   const password = String(form.get("password") || "");
   if (password.length < 10) return { error: "Use at least 10 characters." };
+  if (password !== String(form.get("confirmPassword") ?? "")) return { error: "The passwords don't match." };
 
   const user = await db.user.findUnique({ where: { email } });
   if (!user || !user.resetCode) return { error: "That code does not match." };
@@ -835,6 +837,13 @@ export async function adminCreateBackup() {
   const file = await snapshotDatabase();
   revalidatePath("/admin/backups");
   return { ok: true, file };
+}
+
+export async function adminDeleteBackup(name) {
+  await assertAdmin();
+  if (!(await deleteBackup(String(name || "")))) return { error: "That backup isn't there anymore." };
+  revalidatePath("/admin/backups");
+  return { ok: true };
 }
 
 /* ── travel buddies ───────────────────────────────────────────────── */

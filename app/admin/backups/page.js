@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import BackupActions from "../BackupActions";
+import DeleteBackupButton from "../DeleteBackupButton";
 import { currentUser, isAdminUser } from "@/lib/session";
 import { listBackups } from "@/lib/backup";
 
@@ -64,9 +65,12 @@ export default async function AdminBackups() {
                   <td className="text-muted">{fmtBytes(b.size)}</td>
                   <td className="text-muted">{fmtWhen(b.mtime)}</td>
                   <td>
-                    <a className="btn btn-secondary" href={"/api/admin/backup?f=" + encodeURIComponent(b.name)}>
-                      <i className="ph ph-download-simple" />Download
-                    </a>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+                      <a className="btn btn-secondary" href={"/api/admin/backup?f=" + encodeURIComponent(b.name)}>
+                        <i className="ph ph-download-simple" />Download
+                      </a>
+                      <DeleteBackupButton name={b.name} />
+                    </div>
                   </td>
                 </tr>
               ))}
