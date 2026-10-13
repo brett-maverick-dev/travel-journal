@@ -413,3 +413,14 @@ a:hover { color: var(--color-accent-300); }
 .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; z-index: 1; }
 @keyframes lightbox-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .lightbox { animation: none; } }
+
+/* reordering: the grip, and the photo being dragged */
+/* bottom-left: on narrow (phone) tiles the top-right action buttons span the whole width */
+.photo-grip { position: absolute; bottom: 6px; left: 6px; width: 30px; height: 30px; opacity: 0; cursor: grab;
+  touch-action: none; background: color-mix(in srgb, var(--color-bg) 72%, transparent); transition: opacity .16s ease; }
+.photo-grip:active { cursor: grabbing; }
+.photo-tile:hover .photo-grip, .photo-tile:focus-within .photo-grip, .photo-grip:focus-visible { opacity: 1; }
+@media (hover: none) { .photo-grip { opacity: 1; } }
+.photo-dragging { position: relative; z-index: 2; }
+.photo-dragging .photo-tile { transform: scale(1.04); box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-lg); opacity: .92; }
+.photo-dragging .photo-grip { opacity: 1; cursor: grabbing; }

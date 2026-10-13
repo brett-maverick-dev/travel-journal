@@ -834,6 +834,24 @@ export async function updatePhoto(id, field, value) {
   revalidatePath("/trips/" + photo.page.tripId + "/pages/" + photo.pageId);
 }
 
+// Saves a page's photo order. `ids` must be exactly that page's photos (in
+// the new order) — anything else is refused rather than half-applied.
+export async function reorderPhotos(pageId, ids) {
+  const page = await db.page.findUnique({ where: { id: String(pageId || "") } });
+  if (!page) throw new Error("NOT_FOUND");
+  await assertOwner(page.tripId);
+  const current = await db.photo.findMany({ where: { pageId: page.id }, select: { id: true } });
+  const wanted = Array.isArray(ids) ? ids.map(String) : [];
+  const known = new Set(current.map((p) => p.id));
+  if (wanted.length !== known.size || new Set(wanted).size !== wanted.length || !wanted.every((id) => known.has(id))) {
+    return { error: "The photos changed — reload and try again." };
+  }
+  await db.$transaction(wanted.map((id, position) => db.photo.update({ where: { id }, data: { position } })));
+  revalidatePath("/trips/" + page.tripId);
+  revalidatePath("/trips/" + page.tripId + "/pages/" + page.id);
+  return { ok: true };
+}
+
 export async function deletePhoto(id) {
   const photo = await db.photo.findUnique({ where: { id }, include: { page: true } });
   if (!photo) return;
