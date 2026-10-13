@@ -1,16 +1,20 @@
 // Entry point for managed Node hosts (GoDaddy Node.js Hosting and similar).
 // Jobs, in order:
-//   1. make sure the persistent data + upload directories exist, and point
-//      DATABASE_URL at the database file inside them
-//   2. optionally restore a backup (RESTORE_BACKUP) — there is no shell to do it in
-//   3. apply pending Prisma migrations (no deploy shell to run them in either)
+//   1. point DATABASE_URL at the platform's managed MySQL database
+//   2. apply pending Prisma migrations (there is no deploy shell to run them in)
+//   3. optionally seed (SEED_ON_BOOT) or restore a backup (RESTORE_BACKUP)
 //   4. snapshot the database (on boot, then daily) — see lib/backup.js
 //   5. start Next.js on the port the platform assigns
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import nextEnv from "@next/env";
+
+// Every path below (public/assets, prisma/, .next) is relative to the app,
+// so don't depend on the host launching us from the app directory.
+process.chdir(dirname(fileURLToPath(import.meta.url)));
 
 // This always runs the production build (dev: false below), so React and the
 // session cookie's `secure` flag need NODE_ENV to say so. Hosts that launch
@@ -26,86 +30,43 @@ nextEnv.loadEnvConfig(process.cwd());
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
-const DATA_DIR = "public/assets/data";
 
-// Everything under public/assets survives a redeploy on GoDaddy Node.js Hosting,
-// so both the SQLite file and uploaded photos live there.
-for (const dir of ["public/assets/uploads", DATA_DIR]) {
+// Uploaded photos and backup snapshots live under public/assets, the
+// directory GoDaddy keeps between deploys. The database itself is MySQL.
+for (const dir of ["public/assets/uploads", "public/assets/data"]) {
   try { mkdirSync(dir, { recursive: true }); } catch {}
 }
 
-// Prisma resolves a relative SQLite path against prisma/ (where schema.prisma
-// lives), not the project root. The value this app used to document,
-// file:./public/assets/data/app.db, therefore put the database in
-// prisma/public/assets/data/ — outside the persistent directory, so every
-// redeploy wiped it. Anything written as ./public/… was clearly meant from
-// the project root, so pin it there as an absolute path; the Prisma CLI runs
-// below and Next.js both inherit it from process.env.
-function sqlitePath() {
-  const url = process.env.DATABASE_URL || "";
-  if (!url.startsWith("file:")) return null; // Postgres etc. — nothing to do
-  const [rawPath, query] = url.slice("file:".length).split("?");
-  if (isAbsolute(rawPath)) return rawPath;
-  if (/^(\.\/)?public\//.test(rawPath)) {
-    const abs = resolve(rawPath);
-    process.env.DATABASE_URL = "file:" + abs + (query ? "?" + query : "");
-    console.log("[trekkster] DATABASE_URL is relative to the project root; using " + abs);
-    console.log("[trekkster] (set DATABASE_URL to file:../public/assets/data/app.db to silence this)");
-    return abs;
+// GoDaddy hands each published app a managed MySQL database as DB_HOST,
+// DB_PORT, DB_NAME, DB_USER and DB_PASSWORD. A DATABASE_URL secret that is
+// already a mysql:// URL wins; anything else (such as the file: URL from the
+// SQLite days) is replaced with one built from the DB_* variables. Prisma CLI
+// runs below and Next.js both inherit it from process.env.
+function resolveDatabaseUrl() {
+  const current = process.env.DATABASE_URL || "";
+  if (/^mysql:\/\//.test(current)) {
+    const { hostname, port, pathname } = new URL(current);
+    console.log("[trekkster] database: DATABASE_URL → " + hostname + ":" + (port || 3306) + pathname);
+    return true;
   }
-  return resolve("prisma", rawPath);
+  const { DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD } = process.env;
+  if (DB_HOST && DB_NAME && DB_USER) {
+    process.env.DATABASE_URL = "mysql://" + encodeURIComponent(DB_USER) +
+      (DB_PASSWORD ? ":" + encodeURIComponent(DB_PASSWORD) : "") +
+      "@" + DB_HOST + ":" + (DB_PORT || 3306) + "/" + encodeURIComponent(DB_NAME);
+    console.log("[trekkster] database: DB_* variables → " + DB_HOST + ":" + (DB_PORT || 3306) + "/" + DB_NAME +
+      (current ? " (ignoring the non-MySQL DATABASE_URL secret)" : ""));
+    return true;
+  }
+  // Names only — never print values.
+  const seen = Object.keys(process.env).filter((k) => /^(DB_|DATABASE|MYSQL)/i.test(k));
+  console.error("[trekkster] no MySQL database configured — need DB_HOST, DB_NAME and DB_USER " +
+    "(and usually DB_PASSWORD), or a mysql:// DATABASE_URL. Found: " + (seen.join(", ") || "none"));
+  return false;
 }
 
-const dbFile = sqlitePath();
-
-// A database left at the old, non-persistent location on a host where it
-// happened to survive (a VPS, a local checkout) — carry it over once.
-if (dbFile && !existsSync(dbFile)) {
-  const legacy = resolve("prisma", DATA_DIR, "app.db");
-  if (legacy !== dbFile && existsSync(legacy)) {
-    copyFileSync(legacy, dbFile);
-    console.log("[trekkster] copied database from old location " + legacy + " → " + dbFile);
-  }
-}
-
-// RESTORE_BACKUP=app-2026-….db replaces the live database with that snapshot
-// from public/assets/data/backups on the next boot — the only way to restore
-// on a host with no shell. A marker file makes it happen once per snapshot, so
-// leaving the secret set by mistake can't keep rolling the data back.
-const restoreName = basename(process.env.RESTORE_BACKUP || "");
-if (dbFile && restoreName) {
-  const source = join(DATA_DIR, "backups", restoreName);
-  const marker = join(DATA_DIR, ".restored-" + restoreName);
-  if (existsSync(marker)) {
-    console.log("[trekkster] RESTORE_BACKUP " + restoreName + " was already restored — remove the secret");
-  } else if (!existsSync(source)) {
-    console.warn("[trekkster] RESTORE_BACKUP: no backup named " + restoreName + " in " + join(DATA_DIR, "backups"));
-  } else {
-    if (existsSync(dbFile)) {
-      const keep = join(DATA_DIR, "backups", "pre-restore-" + new Date().toISOString().replace(/[:.]/g, "-") + ".db.bak");
-      copyFileSync(dbFile, keep);
-      console.log("[trekkster] saved the current database as " + keep + " before restoring");
-    }
-    copyFileSync(source, dbFile);
-    writeFileSync(marker, new Date().toISOString() + "\n");
-    console.log("[trekkster] restored database from " + source);
-  }
-}
-
-// lib/backup.js creates its PrismaClient on import, so load it only now that
-// DATABASE_URL is final.
-const { snapshotDatabase } = await import("./lib/backup.js");
-
-function migrationNames() {
-  try {
-    return readdirSync("prisma/migrations").filter((d) => !d.startsWith(".")).sort();
-  } catch {
-    return [];
-  }
-}
-
-// Runs an `npx prisma ...` command, printing its output live (same visibility
-// as stdio:"inherit") while also capturing it so migrate() can inspect it.
+// Runs an `npx prisma ...` command, printing its output live while also
+// capturing it so the caller can inspect it.
 function run(args) {
   const res = spawnSync("npx", args, { encoding: "utf8", shell: process.platform === "win32" });
   const output = (res.stdout || "") + (res.stderr || "");
@@ -113,50 +74,62 @@ function run(args) {
   return { status: res.status, output };
 }
 
-function finishSchemaStep(ok) {
-  if (!ok) {
-    console.warn("[trekkster] schema step failed — check DATABASE_URL in your app " +
-      "secrets. Starting anyway so the runtime log is reachable.");
-    return;
+function migrate() {
+  console.log("[trekkster] npx prisma migrate deploy");
+  const res = run(["prisma", "migrate", "deploy"]);
+  if (res.status === 0) return true;
+  if (res.output.includes("P3005")) {
+    console.warn("[trekkster] the MySQL database already has tables that didn't come from these " +
+      "migrations. Empty it from GoDaddy's Database section (SQL editor) and redeploy.");
+  } else {
+    console.warn("[trekkster] schema step failed — check the database variables. " +
+      "Starting anyway so the runtime log is reachable.");
   }
+  return false;
+}
+
+const dbReady = resolveDatabaseUrl() && migrate();
+
+// lib/backup.js creates its PrismaClient on import, so load it only now that
+// DATABASE_URL is final.
+const { snapshotDatabase, restoreBackup } = await import("./lib/backup.js");
+const { db } = await import("./lib/db.js");
+
+if (dbReady) {
+  // Worth having in the runtime log: cascading deletes (deleting a user or a
+  // trip) rely on the server's foreign keys behaving like MySQL 8's.
+  try {
+    const [row] = await db.$queryRawUnsafe("SELECT VERSION() AS version");
+    let fkMode = "";
+    try {
+      const [fk] = await db.$queryRawUnsafe("SELECT @@innodb_native_foreign_keys AS native");
+      fkMode = Number(fk.native) ? " (native foreign keys)" : " (innodb_native_foreign_keys=OFF)";
+    } catch {} // MySQL 8 has no such variable — native foreign keys, nothing to report
+    console.log("[trekkster] MySQL " + row.version + fkMode);
+  } catch (err) {
+    console.warn("[trekkster] couldn't query the database: " + err.message);
+  }
+
+  // RESTORE_BACKUP=app-2026-….json loads that snapshot from
+  // public/assets/data/backups — only into an empty database, so leaving the
+  // secret set can't overwrite anything later.
+  if (process.env.RESTORE_BACKUP) {
+    try {
+      const counts = await restoreBackup(process.env.RESTORE_BACKUP);
+      console.log("[trekkster] restored " + process.env.RESTORE_BACKUP + ": " + JSON.stringify(counts) +
+        " — remove the RESTORE_BACKUP secret");
+    } catch (err) {
+      console.warn("[trekkster] RESTORE_BACKUP skipped: " + err.message);
+    }
+  }
+
   if (process.env.SEED_ON_BOOT === "1") {
     spawnSync("node", ["prisma/seed.mjs"], { stdio: "inherit" });
   }
 }
 
-function migrate() {
-  const names = migrationNames();
-
-  // No committed migrations yet (a fresh clone that only has schema.prisma) —
-  // push the schema so the first boot still has tables.
-  if (names.length === 0) {
-    console.log("[trekkster] npx prisma db push --skip-generate");
-    const res = spawnSync("npx", ["prisma", "db", "push", "--skip-generate"],
-      { stdio: "inherit", shell: process.platform === "win32" });
-    finishSchemaStep(res.status === 0);
-    return;
-  }
-
-  console.log("[trekkster] npx prisma migrate deploy");
-  let res = run(["prisma", "migrate", "deploy"]);
-
-  if (res.status !== 0 && res.output.includes("P3005")) {
-    // The tables already exist (this database was built with `prisma db push`
-    // before migrations were introduced) but there's no migration history yet.
-    // Baseline it: mark the earliest migration as already applied — its SQL
-    // matches what's already there — then retry. Self-healing, so this needs
-    // no manual shell access on a host with none.
-    console.log("[trekkster] baselining existing database against " + names[0]);
-    run(["prisma", "migrate", "resolve", "--applied", names[0]]);
-    res = run(["prisma", "migrate", "deploy"]);
-  }
-
-  finishSchemaStep(res.status === 0);
-}
-
-migrate();
-
 async function backupTick() {
+  if (!dbReady) return;
   try {
     const file = await snapshotDatabase();
     console.log("[trekkster] database snapshot → " + file);
@@ -174,9 +147,9 @@ setInterval(backupTick, 24 * 60 * 60 * 1000);
 const app = next({ dev: false });
 const handle = app.getRequestHandler();
 
-// The database and its backups live under public/ (the only persistent
-// directory), and Next serves whatever is in public/ as static files. Never
-// let a request reach them; admins download backups through /admin/backups.
+// Backup snapshots live under public/ (the only persistent directory), and
+// Next serves whatever is in public/ as static files. Never let a request
+// reach them; admins download backups through /admin/backups.
 function isPrivateData(url) {
   let path = (url || "/").split("?")[0];
   try { path = decodeURIComponent(path); } catch {}

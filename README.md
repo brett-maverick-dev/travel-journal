@@ -15,7 +15,7 @@ the same API.
 | Concern | Choice |
 | --- | --- |
 | Framework | Next.js 15, App Router, React 19 |
-| Data | Prisma ORM — SQLite in dev, Postgres in prod (one-line provider swap) |
+| Data | Prisma ORM on MySQL — GoDaddy's managed database in prod, a local MySQL in dev |
 | Auth | Email + password, verification code, signed JWT session cookie (`jose`) |
 | Photos | Local disk in dev via `lib/storage.js`; swap for S3/R2/UploadThing in prod |
 | Maps | Leaflet + OpenStreetMap tiles, loaded client-side |
@@ -23,10 +23,15 @@ the same API.
 
 ## Run it
 
+Needs a MySQL 8 server. On a Mac: `brew install mysql && brew services start mysql`,
+then create a database and user and put them in `DATABASE_URL`. If Homebrew installs
+a newer MySQL with `innodb_native_foreign_keys` off, set it `ON` in
+`/opt/homebrew/etc/my.cnf` — cascading deletes misbehave without it.
+
 ```bash
-cp .env.example .env        # then edit SESSION_SECRET
+cp .env.example .env        # then edit SESSION_SECRET and DATABASE_URL
 npm install                 # also runs scripts/normalize-routes.mjs (see below)
-npm run migrate             # creates public/assets/data/app.db from prisma/schema.prisma
+npx prisma migrate deploy   # creates the tables
 npm run seed                # optional: six demo trips
 npm run dev                 # http://localhost:3000
 ```
@@ -69,10 +74,10 @@ The package already meets the platform requirements: `package.json` has a non-em
    | Secret | Value |
    | --- | --- |
    | `SESSION_SECRET` | A long random string (`openssl rand -base64 32`) |
-   | `DATABASE_URL` | `file:../public/assets/data/app.db` — or your Postgres URL (Prisma resolves SQLite paths from `prisma/`, hence `../`) |
+   | `DATABASE_URL` | Not needed — the managed MySQL's `DB_*` variables are used. Delete any old `file:` value |
    | `SEED_ON_BOOT` | `1` on the very first boot only, to load the six demo trips |
    | `SMTP_URL` | Optional. Blank means codes print to the runtime log |
-   | `RESTORE_BACKUP` | Optional. A snapshot file name from `/admin/backups` to restore on the next boot (once) |
+   | `RESTORE_BACKUP` | Optional. A snapshot file name from `/admin/backups` to load into an empty database |
 
 5. **Import & Deploy**, then open the preview URL.
 6. Sign up. With no `SMTP_URL` set, read the six-digit code from **Runtime Logs**.
@@ -84,24 +89,20 @@ screen directly and returns 200, so health checks never have to follow a redirec
 
 Three platform details the app is built around:
 
-- **Persistence.** Only `/public/assets/` survives a redeploy, so both uploaded photos
-  (`public/assets/uploads`) and the SQLite file (`public/assets/data/app.db`) live there.
-  Write nothing you want to keep anywhere else in the project. Because that's under
-  `public/`, `server.mjs` (and `middleware.js`) refuse every request for
-  `/assets/data/*` so the database and backups are never served as static files.
-  An older `DATABASE_URL` of `file:./public/...` is pinned to the project root on boot.
+- **Database.** Users, trips and pages live in the managed MySQL database GoDaddy
+  provides with every published app (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
+  `DB_PASSWORD`). It isn't part of the deploy, so redeploying never touches the data.
+  The boot log prints which host/database it connected to, and the MySQL version.
+- **Persistence for files.** Only `/public/assets/` survives a redeploy, so uploaded
+  photos (`public/assets/uploads`) and backup snapshots (`public/assets/data/backups`)
+  live there. Because that's under `public/`, `server.mjs` (and `middleware.js`) refuse
+  every request for `/assets/data/*`, so backups are never served as static files.
 - **No deploy shell.** `server.mjs` applies the database schema itself on boot, via
-  `prisma migrate deploy`. If it ever hits a database that already has these tables but
-  no migration history (e.g. one that predates migrations, built with `prisma db push`),
-  it self-baselines — marks the earliest committed migration as already applied, then
-  retries — so this needs no manual shell access. See "Changing the schema" below for
-  how to add a migration.
-- **Automatic backups.** `server.mjs` also takes a consistent snapshot of `app.db`
-  (SQLite `VACUUM INTO`, safe even while the app is live) on every boot and once a day
-  after that, keeping the 14 most recent under `public/assets/data/backups/`. An admin
-  can list, trigger, and download them from `/admin/backups`. To roll back, set the
-  `RESTORE_BACKUP` secret to a snapshot's file name and redeploy; the current database
-  is saved alongside as `pre-restore-*.db.bak` first.
+  `prisma migrate deploy`. See "Changing the schema" below for how to add a migration.
+- **Automatic backups.** `server.mjs` also writes a JSON snapshot of every table on every
+  boot and once a day after that, keeping the 14 most recent under
+  `public/assets/data/backups/`. An admin can list, trigger, and download them from
+  `/admin/backups`. `RESTORE_BACKUP` loads one into an empty database (e.g. a fresh one).
 
 If a deploy fails, **Runtime Logs** is the first place to look; the schema step logs the
 exact command it ran.
@@ -130,8 +131,6 @@ PORT=8080 npm start
 
 - Set a long random `SESSION_SECRET`. Cookies are `httpOnly`, `sameSite=lax`, and
   `secure` once `NODE_ENV=production`.
-- Move to Postgres (`DATABASE_URL` + `provider = "postgresql"`) before running more than
-  one instance — SQLite does not survive concurrent writers across processes.
 - Replace `lib/storage.js` with S3/R2 presigned uploads if you scale past one instance;
   the rest of the app only consumes the URL it returns.
 - Set `SMTP_URL` and `MAIL_FROM` so verification/reset codes email out instead of only

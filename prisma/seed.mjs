@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-
-const db = new PrismaClient();
+import { db } from "../lib/db.js";
 const day = (iso) => new Date(iso + "T00:00:00.000Z");
 
 const TRIPS = [

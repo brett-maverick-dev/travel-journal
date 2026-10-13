@@ -355,9 +355,24 @@ export async function renameTrip(tripId, name) {
   revalidatePath("/trips/" + tripId);
 }
 
+// Deletes trips and everything under them child-first, in one transaction,
+// instead of relying on the database's ON DELETE CASCADE alone — newer MySQL
+// releases running with innodb_native_foreign_keys=OFF were seen to leave
+// pages behind on multi-level cascades.
+function deleteTripsTx(where) {
+  const trip = { trip: where };
+  return [
+    db.photo.deleteMany({ where: { page: trip } }),
+    db.page.deleteMany({ where: trip }),
+    db.destination.deleteMany({ where: trip }),
+    db.tripBuddy.deleteMany({ where: trip }),
+    db.trip.deleteMany({ where })
+  ];
+}
+
 export async function deleteTrip(tripId) {
   await assertTripOwner(tripId);
-  await db.trip.delete({ where: { id: tripId } });
+  await db.$transaction(deleteTripsTx({ id: tripId }));
   revalidatePath("/trips");
   redirect("/trips");
 }
@@ -659,7 +674,12 @@ export async function adminSetAdmin(userId, admin) {
 export async function adminDeleteUser(userId) {
   const me = await assertAdmin();
   if (userId === me.id) return { error: "You can't delete your own account here." };
-  await db.user.delete({ where: { id: userId } });
+  await db.$transaction([
+    ...deleteTripsTx({ userId }),
+    db.tripBuddy.deleteMany({ where: { userId } }),
+    db.buddy.deleteMany({ where: { OR: [{ requesterId: userId }, { addresseeId: userId }] } }),
+    db.user.delete({ where: { id: userId } })
+  ]);
   revalidatePath("/admin");
   return { ok: true };
 }

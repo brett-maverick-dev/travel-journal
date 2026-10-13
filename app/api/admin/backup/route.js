@@ -13,7 +13,7 @@ export async function GET(req) {
 
   return new Response(Readable.toWeb(createReadStream(path)), {
     headers: {
-      "Content-Type": "application/octet-stream",
+      "Content-Type": "application/json",
       "Content-Disposition": 'attachment; filename="' + name + '"'
     }
   });

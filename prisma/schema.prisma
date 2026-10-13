@@ -3,9 +3,10 @@ generator client {
 }
 
 datasource db {
-  // SQLite is fine for one instance with the file under public/assets (persistent
-  // on GoDaddy Node.js Hosting). Switch to "postgresql" for multiple instances.
-  provider = "sqlite"
+  // GoDaddy Node.js Hosting gives every published app a managed MySQL
+  // database, and it outlives deploys — unlike files on the app's disk.
+  // server.mjs builds DATABASE_URL from the platform's DB_* variables.
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -23,16 +24,16 @@ model User {
   resetExpires      DateTime?
   resetAttempts     Int         @default(0) // wrong guesses against the current resetCode
   name              String      @default("")
-  avatarUrl         String?
+  avatarUrl         String?     @db.VarChar(1024)
   homeCity          String      @default("")
   favoritePlace     String      @default("")
-  bio               String      @default("")
-  facebookUrl       String      @default("")
-  instagramUrl      String      @default("")
-  tiktokUrl         String      @default("")
-  xUrl              String      @default("")
-  youtubeUrl        String      @default("")
-  pinterestUrl      String      @default("")
+  bio               String      @db.Text // TEXT can't take a DB default in MySQL — lib/db.js fills ""
+  facebookUrl       String      @default("") @db.VarChar(1024)
+  instagramUrl      String      @default("") @db.VarChar(1024)
+  tiktokUrl         String      @default("") @db.VarChar(1024)
+  xUrl              String      @default("") @db.VarChar(1024)
+  youtubeUrl        String      @default("") @db.VarChar(1024)
+  pinterestUrl      String      @default("") @db.VarChar(1024)
   createdAt         DateTime    @default(now())
   trips             Trip[]
   buddiesSent       Buddy[]     @relation("BuddyRequester")
@@ -62,12 +63,12 @@ model Trip {
   id           String        @id @default(cuid())
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name         String
+  name         String        @db.VarChar(500)
   country      String        @default("")
   visibility   String        @default("PRIVATE") // PRIVATE | PUBLIC
   startDate    DateTime
   endDate      DateTime
-  coverUrl     String?
+  coverUrl     String?       @db.VarChar(1024)
   // Where the trip starts from. Kept off the destination list on purpose — it
   // gets no pages of its own; the first destination's transport describes
   // the leg from here.
@@ -102,13 +103,13 @@ model Destination {
   id        String   @id @default(cuid())
   tripId    String
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  name      String
+  name      String   @db.VarChar(500)
   lat       Float?
   lng       Float?
   arrive    DateTime
   depart    DateTime
   transport String   @default("Flight") // Flight | Train | Bus | Rental car | Ferry | On foot
-  detail    String   @default("") // "NH106 · 11h 40m"
+  detail    String   @default("") @db.VarChar(500) // "NH106 · 11h 40m"
   position  Int      @default(0)
 
   @@index([tripId])
@@ -120,15 +121,15 @@ model Page {
   trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   kind     String   @default("DAY") // DAY | ACTIVITY
   parentId String? // set on ACTIVITY pages: the day they belong to
-  title    String   @default("Untitled page")
+  title    String   @default("Untitled page") @db.VarChar(500)
   date     DateTime
   time     String? // activity pages: "14:20"
   place    String   @default("")
   weather  String   @default("")
   spend    String   @default("")
   steps    String   @default("")
-  notes    String   @default("")
-  tags     String   @default("") // comma separated
+  notes    String   @db.Text // TEXT: default "" comes from lib/db.js
+  tags     String   @db.Text // comma separated; default "" comes from lib/db.js
   hidden   Boolean  @default(false)
   position Int      @default(0)
   photos   Photo[]
@@ -141,8 +142,8 @@ model Photo {
   id       String @id @default(cuid())
   pageId   String
   page     Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  url      String
-  caption  String @default("")
+  url      String @db.VarChar(1024)
+  caption  String @db.Text // default "" comes from lib/db.js
   position Int    @default(0)
 
   @@index([pageId])
