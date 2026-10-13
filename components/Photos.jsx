@@ -1,10 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { uploadPhotos, deletePhoto } from "@/app/actions";
+import { compressInputFiles } from "@/lib/compress-image";
 
 export default function Photos({ pageId, photos, canEdit }) {
   const [state, action, pending] = useActionState(uploadPhotos, null);
+  const [shrinking, setShrinking] = useState(false);
+  const onPick = async (e) => {
+    const input = e.currentTarget;
+    setShrinking(true);
+    try { await compressInputFiles(input); } finally { setShrinking(false); }
+    input.form.requestSubmit();
+  };
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
@@ -28,9 +36,8 @@ export default function Photos({ pageId, photos, canEdit }) {
               gap: 6, fontSize: 12, textAlign: "center", padding: 10
             }}>
               <i className="ph ph-image-square" style={{ fontSize: 20 }} />
-              {pending ? "Uploading…" : "Add photos"}
-              <input hidden type="file" name="photos" accept="image/*" multiple
-                onChange={(e) => e.currentTarget.form.requestSubmit()} />
+              {shrinking ? "Optimising…" : pending ? "Uploading…" : "Add photos"}
+              <input hidden type="file" name="photos" accept="image/*" multiple onChange={onPick} />
             </label>
           </form>
         )}

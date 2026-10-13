@@ -98,8 +98,13 @@ function pin(label, variant) {
 }
 
 function popup(trip) {
+  // Same framing as the trip header (see coverFrame in lib/format.js).
+  const f = trip.coverFrame || { zoom: 1, x: 50, y: 50 };
+  const framing = "object-position:" + f.x + "% " + f.y + "%;transform-origin:" + f.x + "% " + f.y + "%" +
+    (f.zoom > 1 ? ";transform:scale(" + f.zoom + ")" : "");
   const cover = trip.coverUrl
-    ? "<img src='" + esc(trip.coverUrl) + "' alt='' style='width:100%;height:118px;object-fit:cover'>"
+    ? "<div style='height:118px;overflow:hidden'><img src='" + esc(trip.coverUrl) + "' alt='' " +
+      "style='width:100%;height:118px;object-fit:cover;" + esc(framing) + "'></div>"
     : "<div style='height:118px;background:#292b31'></div>";
   return "<div style='padding:0 0 12px'>" + cover +
     "<div style='padding:10px 12px 0'>" +

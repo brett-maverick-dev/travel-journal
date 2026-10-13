@@ -6,6 +6,7 @@ import Field from "@/components/Field";
 import Photos from "@/components/Photos";
 import VisibilityToggle from "./VisibilityToggle";
 import CoverUpload from "./CoverUpload";
+import CoverImage from "./CoverImage";
 import AddButton from "./AddButton";
 import DeleteTripButton from "./DeleteTripButton";
 import DeletePageButton from "@/components/DeletePageButton";
@@ -17,7 +18,7 @@ import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
 import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture, updateArrival, addLayover, updateLayover, updateReturn } from "@/app/actions";
-import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON, mapStops } from "@/lib/format";
+import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON, mapStops, coverFrame } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP, DEPARTURE_GROUP, RETURN_GROUP } from "@/lib/pages";
 
 export default async function TripPage({ params, searchParams }) {
@@ -282,7 +283,7 @@ export default async function TripPage({ params, searchParams }) {
     )
   }]));
   const mapTrips = [{
-    id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl,
+    id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl, coverFrame: coverFrame(trip),
     dateRange: fmtRange(trip.startDate, trip.endDate), href: "/trips/" + trip.id,
     stops: mapStops(await withDepartureCoords(trip))
   }];
@@ -293,7 +294,7 @@ export default async function TripPage({ params, searchParams }) {
 
       <div style={{ position: "relative", height: 340, overflow: "hidden", background: "var(--color-neutral-900)" }}>
         {trip.coverUrl
-          ? <img src={trip.coverUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ? <CoverImage tripId={trip.id} url={trip.coverUrl} frame={coverFrame(trip)} canEdit />
           : <div style={{ position: "absolute", inset: 0 }} />}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, var(--color-bg) 2%, color-mix(in srgb, var(--color-bg) 55%, transparent) 45%, transparent)" }} />
         <div style={{ position: "absolute", left: 34, top: 22, display: "flex", gap: 8 }}>

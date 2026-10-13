@@ -3,7 +3,7 @@ import Nav from "@/components/Nav";
 import TripBrowser from "./TripBrowser";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { fmtRange, mapStops, TRANSPORT_ICON } from "@/lib/format";
+import { fmtRange, mapStops, TRANSPORT_ICON, coverFrame } from "@/lib/format";
 import { withDepartureCoords } from "@/lib/geo";
 
 export default async function Trips() {
@@ -29,6 +29,7 @@ export default async function Trips() {
     name: t.name,
     country: t.country || t.destinations[0]?.name || "",
     coverUrl: t.coverUrl,
+    coverFrame: coverFrame(t),
     visibility: t.visibility,
     dateRange: fmtRange(t.startDate, t.endDate),
     href: "/trips/" + t.id,

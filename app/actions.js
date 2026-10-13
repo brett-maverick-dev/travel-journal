@@ -787,7 +787,28 @@ export async function setTripCover(_prev, form) {
   if (!file || typeof file.arrayBuffer !== "function" || !file.size) return { error: "Choose an image." };
   if (!String(file.type || "").startsWith("image/")) return { error: "That file isn't an image." };
   const url = await saveUpload(file);
-  await db.trip.update({ where: { id: tripId }, data: { coverUrl: url } });
+  // A new picture starts from the default framing.
+  await db.trip.update({ where: { id: tripId }, data: { coverUrl: url, coverZoom: 1, coverX: 50, coverY: 50 } });
+  revalidatePath("/trips/" + tripId);
+  revalidatePath("/trips");
+  return { ok: true };
+}
+
+// How the cover sits in its frame — see coverFrame() in lib/format.js.
+export async function setCoverFrame(tripId, frame) {
+  await assertOwner(tripId);
+  const num = (v, lo, hi, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+  };
+  await db.trip.update({
+    where: { id: tripId },
+    data: {
+      coverZoom: num(frame?.zoom, 1, 3, 1),
+      coverX: num(frame?.x, 0, 100, 50),
+      coverY: num(frame?.y, 0, 100, 50)
+    }
+  });
   revalidatePath("/trips/" + tripId);
   revalidatePath("/trips");
   return { ok: true };

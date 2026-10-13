@@ -6,7 +6,7 @@ import TripJournal from "@/components/TripJournal";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
 import { currentUser } from "@/lib/session";
-import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON, mapStops } from "@/lib/format";
+import { fmt, fmtRange, nights, tagList, TRANSPORT_ICON, mapStops, coverStyle, coverFrame } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP, DEPARTURE_GROUP, RETURN_GROUP } from "@/lib/pages";
 
 export async function generateMetadata({ params }) {
@@ -178,7 +178,7 @@ export default async function PublicTrip({ params, searchParams }) {
     }];
   }));
   const mapTrips = [{
-    id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl,
+    id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl, coverFrame: coverFrame(trip),
     dateRange: fmtRange(trip.startDate, trip.endDate), href: "#",
     stops: mapStops(await withDepartureCoords(trip))
   }];
@@ -186,7 +186,7 @@ export default async function PublicTrip({ params, searchParams }) {
   return (
     <>
       <div style={{ position: "relative", height: 320, overflow: "hidden", background: "var(--color-neutral-900)" }}>
-        {trip.coverUrl && <img src={trip.coverUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        {trip.coverUrl && <img src={trip.coverUrl} alt="" style={coverStyle(trip)} />}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, var(--color-bg) 2%, color-mix(in srgb, var(--color-bg) 55%, transparent) 45%, transparent)" }} />
         <div style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
           <div>

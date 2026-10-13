@@ -69,6 +69,11 @@ model Trip {
   startDate    DateTime
   endDate      DateTime
   coverUrl     String?       @db.VarChar(1024)
+  // How the cover is framed: a zoom (1 = just fills the frame) about a focus
+  // point given as percentages of the image (50/50 = centred).
+  coverZoom    Float         @default(1)
+  coverX       Float         @default(50)
+  coverY       Float         @default(50)
   // Where the trip starts from. Kept off the destination list on purpose — it
   // gets no pages of its own; the first destination's transport describes
   // the leg from here.

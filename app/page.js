@@ -6,7 +6,7 @@ import TripMap from "@/components/TripMap";
 import { signUp } from "@/app/actions";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { fmtRange, mapStops } from "@/lib/format";
+import { fmtRange, mapStops, coverFrame } from "@/lib/format";
 import { withDepartureCoords } from "@/lib/geo";
 
 // The signup screen is the site root so platform health checks get a 200 here
@@ -29,7 +29,7 @@ export default async function Home() {
     const located = [];
     for (const t of rows) located.push(await withDepartureCoords(t));
     trips = located.map((t) => ({
-      id: t.id, name: t.name, country: t.country, coverUrl: t.coverUrl,
+      id: t.id, name: t.name, country: t.country, coverUrl: t.coverUrl, coverFrame: coverFrame(t),
       dateRange: fmtRange(t.startDate, t.endDate),
       href: "/u/" + t.user.handle + "/" + t.id,
       stops: mapStops(t)
