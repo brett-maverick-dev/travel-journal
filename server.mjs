@@ -7,7 +7,7 @@
 //   5. start Next.js on the port the platform assigns
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import nextEnv from "@next/env";
@@ -74,11 +74,57 @@ function run(args) {
   return { status: res.status, output };
 }
 
+// The SQLite-era migrations, replaced by 20261013030000_init_mysql. GoDaddy
+// doesn't clear the app directory between deploys, so these can still be on
+// disk after they were deleted from git — and Prisma would run them against
+// MySQL. Remove them before migrating.
+const RETIRED_MIGRATIONS = [
+  "20260918183603_init", "20260921010236_add_buddies", "20260921011748_add_trip_buddies",
+  "20261013005834_add_code_attempts", "20261013023048_add_trip_departure"
+];
+
 function migrate() {
+  for (const name of RETIRED_MIGRATIONS) {
+    const dir = "prisma/migrations/" + name;
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+      console.log("[trekkster] removed leftover SQLite migration " + name);
+    }
+  }
+
   console.log("[trekkster] npx prisma migrate deploy");
-  const res = run(["prisma", "migrate", "deploy"]);
+  let res = run(["prisma", "migrate", "deploy"]);
+
+  // P3009: the database records a failed migration, and Prisma won't apply
+  // anything until it's resolved. If every failed one is a migration this
+  // app no longer ships — GoDaddy extracts each deploy over the previous
+  // files without cleaning, so migrations deleted from git (the old SQLite
+  // ones) can linger on disk for a deploy and get run against MySQL — mark
+  // it rolled back and retry. A failure in a migration we do ship is real and
+  // is left for a person to look at.
+  if (res.status !== 0 && res.output.includes("P3009")) {
+    const failed = [...res.output.matchAll(/The `([^`]+)` migration started at [^\n]* failed/g)].map((m) => m[1]);
+    let shipped = [];
+    try { shipped = readdirSync("prisma/migrations"); } catch {}
+    const stale = failed.filter((name) => !shipped.includes(name));
+    if (failed.length && stale.length === failed.length) {
+      for (const name of stale) {
+        console.log("[trekkster] " + name + " isn't one of this app's migrations — marking its failed run rolled back");
+        run(["prisma", "migrate", "resolve", "--rolled-back", name]);
+      }
+      res = run(["prisma", "migrate", "deploy"]);
+    } else if (failed.length) {
+      console.warn("[trekkster] migration " + failed.filter((n) => !stale.includes(n)).join(", ") +
+        " failed part-way. Fix the cause, then mark it with `prisma migrate resolve`.");
+    }
+  }
+
   if (res.status === 0) return true;
-  if (res.output.includes("P3005")) {
+  if (/already exists/i.test(res.output)) {
+    console.warn("[trekkster] tables left over from an earlier, failed setup are in the way. Drop them " +
+      "from GoDaddy's Database section (SQL editor) — they hold no app data if the app never started " +
+      "cleanly — and redeploy.");
+  } else if (res.output.includes("P3005")) {
     console.warn("[trekkster] the MySQL database already has tables that didn't come from these " +
       "migrations. Empty it from GoDaddy's Database section (SQL editor) and redeploy.");
   } else {
