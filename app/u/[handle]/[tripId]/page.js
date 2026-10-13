@@ -25,6 +25,7 @@ export default async function PublicTrip({ params, searchParams }) {
     include: {
       user: true,
       destinations: { orderBy: { position: "asc" } },
+      layovers: { orderBy: { position: "asc" } },
       pages: { where: { hidden: false }, orderBy: [{ position: "asc" }, { date: "asc" }], include: { photos: { orderBy: { position: "asc" } } } }
     }
   });
@@ -158,15 +159,25 @@ export default async function PublicTrip({ params, searchParams }) {
         initialDestId={initialDestId}
         initialPageId={groupOf(wantPage) ? wantPage : null}
         emptyHint="Nothing written for this stop yet."
-        departureSet={Boolean(trip.departureCity)}
-        departure={trip.departureCity ? (
+        departureSet={Boolean(trip.departureCity || trip.arrivalCity)}
+        departure={trip.departureCity || trip.arrivalCity ? (
           <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12 }}>
             <div style={{ display: "flex", justifyContent: "center", paddingTop: 2 }}>
               <i className="ph ph-house-line" style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
             </div>
-            <div className="text-muted" style={{ fontSize: 12 }}>
-              Leaving from <span style={{ color: "var(--color-text)" }}>{trip.departureCity}</span>
-              {trip.departureDate ? " · " + fmt(trip.departureDate) : ""}
+            <div className="text-muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+              {trip.departureCity && (
+                <div>
+                  Leaving from <span style={{ color: "var(--color-text)" }}>{trip.departureCity}</span>
+                  {trip.departureDate ? " · " + fmt(trip.departureDate) : ""}
+                </div>
+              )}
+              {trip.layovers.filter((l) => l.name).length > 0 && (
+                <div>via <span style={{ color: "var(--color-text)" }}>{trip.layovers.filter((l) => l.name).map((l) => l.name).join(", ")}</span></div>
+              )}
+              {trip.arrivalCity && (
+                <div>arriving at <span style={{ color: "var(--color-text)" }}>{trip.arrivalCity}</span></div>
+              )}
             </div>
           </div>
         ) : null}

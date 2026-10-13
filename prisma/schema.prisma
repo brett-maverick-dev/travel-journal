@@ -76,6 +76,12 @@ model Trip {
   departureDate DateTime?
   departureLat  Float? // geocoded from departureCity, for the map's starting pin
   departureLng  Float?
+  // Where the departure journey lands (a city or airport, e.g. "NRT"),
+  // before the first destination. Like the departure, it gets no pages.
+  arrivalCity   String       @default("") @db.VarChar(500)
+  arrivalLat    Float?
+  arrivalLng    Float?
+  layovers      Layover[]
   createdAt    DateTime      @default(now())
   destinations Destination[]
   pages        Page[]
@@ -99,6 +105,20 @@ model TripBuddy {
   @@unique([tripId, userId])
   @@index([tripId])
   @@index([userId])
+}
+
+// A stop on the way from the departure city to the arrival — drawn on the
+// map's route, in position order, but with no pages of its own.
+model Layover {
+  id       String @id @default(cuid())
+  tripId   String
+  trip     Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  name     String @db.VarChar(500) // a city or airport, e.g. "LAX"
+  lat      Float?
+  lng      Float?
+  position Int    @default(0)
+
+  @@index([tripId])
 }
 
 model Destination {

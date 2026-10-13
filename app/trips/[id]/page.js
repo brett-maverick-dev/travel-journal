@@ -11,11 +11,12 @@ import DeleteTripButton from "./DeleteTripButton";
 import DeletePageButton from "@/components/DeletePageButton";
 import TripBuddies from "./TripBuddies";
 import DestinationActions from "./DestinationActions";
+import RemoveLayoverButton from "./RemoveLayoverButton";
 import TripJournal from "@/components/TripJournal";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
-import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture } from "@/app/actions";
+import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture, updateArrival, addLayover, updateLayover } from "@/app/actions";
 import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON, mapStops } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP } from "@/lib/pages";
 
@@ -30,6 +31,7 @@ export default async function TripPage({ params, searchParams }) {
     include: {
       user: true,
       destinations: { orderBy: { position: "asc" } },
+      layovers: { orderBy: { position: "asc" } },
       pages: { orderBy: [{ position: "asc" }, { date: "asc" }], include: { photos: { orderBy: { position: "asc" } } } },
       buddies: { include: { user: true }, orderBy: { addedAt: "asc" } }
     }
@@ -55,22 +57,36 @@ export default async function TripPage({ params, searchParams }) {
   const { groups, other } = groupPagesByDestination(trip.destinations, days);
 
   const departure = (
-    <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "center", paddingTop: 9 }}>
-        <i className="ph ph-house-line" style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-        <span className="text-muted" style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", paddingLeft: 4 }}>Leaving from</span>
-        <div style={{ display: "flex", gap: 6 }}>
-          <Field value={trip.departureCity} placeholder="Home city (optional)" save={updateDeparture.bind(null, trip.id, "city")}
-            style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
-          {trip.departureCity && (
-            <Field type="date" value={trip.departureDate ? inputDate(trip.departureDate) : ""}
-              save={updateDeparture.bind(null, trip.id, "date")}
-              style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
-          )}
-        </div>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <JourneyStop icon="ph-house-line" label="Leaving from">
+        <Field value={trip.departureCity} placeholder="Home city (optional)" save={updateDeparture.bind(null, trip.id, "city")}
+          style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+        {trip.departureCity && (
+          <Field type="date" value={trip.departureDate ? inputDate(trip.departureDate) : ""}
+            save={updateDeparture.bind(null, trip.id, "date")}
+            style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
+        )}
+      </JourneyStop>
+      {(trip.departureCity || trip.layovers.length > 0 || trip.arrivalCity) && (
+        <>
+          {trip.layovers.map((l, i) => (
+            <JourneyStop key={l.id} icon="ph-arrows-clockwise" label={"Layover" + (trip.layovers.length > 1 ? " " + (i + 1) : "")}
+              notFound={l.name && l.lat == null}>
+              <Field value={l.name} placeholder="City or airport, e.g. LAX" save={updateLayover.bind(null, l.id)}
+                style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+              <RemoveLayoverButton layoverId={l.id} />
+            </JourneyStop>
+          ))}
+          <div style={{ paddingLeft: 36 }}>
+            <AddButton action={addLayover.bind(null, trip.id)} label="Add layover"
+              style={{ border: 0, justifyContent: "flex-start", padding: 4, fontSize: 11 }} />
+          </div>
+          <JourneyStop icon="ph-airplane-landing" label="Arriving at" notFound={trip.arrivalCity && trip.arrivalLat == null}>
+            <Field value={trip.arrivalCity} placeholder="City or airport, e.g. NRT" save={updateArrival.bind(null, trip.id)}
+              style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+          </JourneyStop>
+        </>
+      )}
     </div>
   );
 
@@ -250,7 +266,7 @@ export default async function TripPage({ params, searchParams }) {
         initialPageId={initialPageId}
         addPage={addDayPage.bind(null, trip.id)}
         departure={departure}
-        departureSet={Boolean(trip.departureCity)}
+        departureSet={Boolean(trip.departureCity || trip.arrivalCity)}
         emptyHint="No pages for this destination yet."
         addDestination={
           <AddButton action={addDestination.bind(null, trip.id)} label="Add destination"
@@ -258,5 +274,21 @@ export default async function TripPage({ params, searchParams }) {
         }
       />
     </>
+  );
+}
+
+// One row of the journey there (a layover or the arrival) under "Leaving from".
+function JourneyStop({ icon, label, notFound, children }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "center", paddingTop: 23 }}>
+        <i className={"ph " + icon} style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        <span className="text-muted" style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", paddingLeft: 4 }}>{label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>{children}</div>
+        {notFound && <span className="text-muted" style={{ fontSize: 10, paddingLeft: 4 }}>Not found on the map — try the airport code or a fuller name.</span>}
+      </div>
+    </div>
   );
 }

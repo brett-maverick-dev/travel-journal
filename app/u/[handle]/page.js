@@ -21,7 +21,10 @@ export default async function PublicProfile({ params }) {
   const trips = await db.trip.findMany({
     where: { userId: user.id, visibility: "PUBLIC" },
     orderBy: { startDate: "desc" },
-    include: { destinations: { orderBy: { position: "asc" } } }
+    include: {
+      destinations: { orderBy: { position: "asc" } },
+      layovers: { orderBy: { position: "asc" } }
+    }
   });
 
   const initials = (user.name || user.handle || "?").slice(0, 2).toUpperCase();

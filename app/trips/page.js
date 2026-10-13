@@ -17,6 +17,7 @@ export default async function Trips() {
     include: {
       user: true,
       destinations: { orderBy: { position: "asc" } },
+      layovers: { orderBy: { position: "asc" } },
       pages: { select: { id: true } }
     }
   });

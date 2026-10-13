@@ -18,7 +18,11 @@ export default async function Home() {
   try {
     const rows = await db.trip.findMany({
       where: { visibility: "PUBLIC" },
-      include: { destinations: { orderBy: { position: "asc" } }, user: true },
+      include: {
+        destinations: { orderBy: { position: "asc" } },
+        layovers: { orderBy: { position: "asc" } },
+        user: true
+      },
       take: 24
     });
     const located = [];

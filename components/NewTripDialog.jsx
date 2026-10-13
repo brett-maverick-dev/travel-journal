@@ -7,6 +7,7 @@ import { TRANSPORT } from "@/lib/format";
 export default function NewTripDialog() {
   const [open, setOpen] = useState(false);
   const [stops, setStops] = useState([0, 1]);
+  const [layovers, setLayovers] = useState([]); // row keys, like `stops`
   const [state, action, pending] = useActionState(createTrip, null);
 
   return (
@@ -58,9 +59,32 @@ export default function NewTripDialog() {
                 <input className="input" id="nt-dep-date" name="departureDate" type="date" />
               </div>
             </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {layovers.map((key, i) => (
+                <div key={key} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8, alignItems: "end" }}>
+                  <div className="field">
+                    <label htmlFor={"nt-layover-" + key}>Layover {layovers.length > 1 ? i + 1 : ""}</label>
+                    <input className="input" id={"nt-layover-" + key} name="layover" placeholder="City or airport, e.g. LAX" />
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-icon" aria-label="Remove layover"
+                    onClick={() => setLayovers((l) => l.filter((k) => k !== key))}>
+                    <i className="ph ph-x" />
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="btn btn-secondary" style={{ alignSelf: "flex-start" }}
+                onClick={() => setLayovers((l) => [...l, l.length ? Math.max(...l) + 1 : 0])}>
+                <i className="ph ph-plus" />Add layover
+              </button>
+              <div className="field">
+                <label htmlFor="nt-arrival">Arriving at</label>
+                <input className="input" id="nt-arrival" name="arrivalCity" placeholder="City or airport, e.g. NRT" />
+              </div>
+            </div>
             <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>
-              Optional — shown above your destinations, with no pages of its own. The first
-              destination's "Getting there" below describes travel from here.
+              All optional — they draw your journey there on the map, with no pages of their own.
+              Airport codes work. The first destination's "Getting there" below describes travel
+              from here.
             </p>
 
             <h6 className="text-muted" style={{ margin: "8px 0 0" }}>Destinations</h6>

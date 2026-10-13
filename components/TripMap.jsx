@@ -71,13 +71,20 @@ function layout(stops) {
 }
 
 // variant: "primary" (the trip's first destination, labelled with the trip
-// name), "stop" (later destinations) or "departure" (where the trip starts).
+// name), "stop" (later destinations), or one of the journey-there stops:
+// "departure" (where the trip starts), "layover", "arrival" (where it lands).
+const GLYPH = {
+  departure: "ph-house-line",
+  layover: "ph-arrows-clockwise",
+  arrival: "ph-airplane-landing"
+};
+
 function pin(label, variant) {
   const primary = variant === "primary";
   const dot = primary
     ? "<span style='width:11px;height:11px;border-radius:50%;background:#968ae0;box-shadow:0 0 0 4px rgba(150,138,224,.22),0 0 12px rgba(150,138,224,.7);flex:none'></span>"
-    : variant === "departure"
-      ? "<i class='ph ph-house-line' style='font-size:12px;line-height:1;color:#cfd3e5;flex:none'></i>"
+    : GLYPH[variant]
+      ? "<i class='ph " + GLYPH[variant] + "' style='font-size:12px;line-height:1;color:#cfd3e5;flex:none'></i>"
       : "<span style='width:7px;height:7px;border-radius:50%;border:1.5px solid #b5abfc;flex:none'></span>";
   const text = "<span class='tm-lbl' style='font:" + (primary ? "500 12px" : "400 10px") +
     "/1 Inter,system-ui,sans-serif;color:" + (primary ? "#e9e9ed" : "#b2b6ca") +
@@ -136,9 +143,9 @@ export default function TripMap({ trips, height = 420, only = false, hoverId = "
         if (pts.length > 1) {
           group.addLayer(L.polyline(path, { color: "#968ae0", weight: 1.4, opacity: 0.5, dashArray: "4 5" }));
         }
-        const firstDest = pts.findIndex((s) => s.kind !== "departure");
+        const firstDest = pts.findIndex((s) => !s.kind);
         pts.forEach((s, i) => {
-          const variant = s.kind === "departure" ? "departure" : i === firstDest ? "primary" : "stop";
+          const variant = s.kind || (i === firstDest ? "primary" : "stop");
           const m = L.marker(placed[i], {
             icon: L.divIcon({ className: "", iconSize: null, html: pin(variant === "primary" ? trip.name : s.name, variant) })
           });

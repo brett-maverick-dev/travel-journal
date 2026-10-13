@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { createSession, destroySession, currentUser, requireUser, isAdminUser } from "@/lib/session";
 import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
 import { saveUpload } from "@/lib/storage";
-import { geocode } from "@/lib/geo";
+import { geocode, geocodeStop } from "@/lib/geo";
 import { snapshotDatabase } from "@/lib/backup";
 import { groupPagesByDestination } from "@/lib/pages";
 
@@ -307,13 +307,27 @@ export async function createTrip(_prev, form) {
   const departureDate = departureCity ? parseDate(form.get("departureDate")) : null;
   const departureCoords = departureCity ? await geocode(departureCity) : null;
 
+  // Stops on the way there (layovers) and where that journey lands — both
+  // only for the map's route; neither gets pages.
+  const layoverNames = form.getAll("layover").map((v) => String(v).trim()).filter(Boolean);
+  const arrivalCity = String(form.get("arrivalCity") || "").trim();
+  const arrivalCoords = arrivalCity ? await geocodeStop(arrivalCity) : null;
+
   const trip = await db.trip.create({
     data: {
       userId: user.id, name, startDate, endDate, visibility, country: places[0] || "",
       departureCity, departureDate,
-      departureLat: departureCoords?.lat ?? null, departureLng: departureCoords?.lng ?? null
+      departureLat: departureCoords?.lat ?? null, departureLng: departureCoords?.lng ?? null,
+      arrivalCity, arrivalLat: arrivalCoords?.lat ?? null, arrivalLng: arrivalCoords?.lng ?? null
     }
   });
+
+  for (let i = 0; i < layoverNames.length; i++) {
+    const coords = await geocodeStop(layoverNames[i]);
+    await db.layover.create({
+      data: { tripId: trip.id, name: layoverNames[i], position: i, lat: coords?.lat ?? null, lng: coords?.lng ?? null }
+    });
+  }
 
   const destinations = [];
   for (let i = 0; i < places.length; i++) {
@@ -367,6 +381,7 @@ function deleteTripsTx(where) {
     db.photo.deleteMany({ where: { page: trip } }),
     db.page.deleteMany({ where: trip }),
     db.destination.deleteMany({ where: trip }),
+    db.layover.deleteMany({ where: trip }),
     db.tripBuddy.deleteMany({ where: trip }),
     db.trip.deleteMany({ where })
   ];
@@ -461,6 +476,45 @@ export async function updateDeparture(tripId, field, value) {
   }
   await db.trip.update({ where: { id: tripId }, data });
   revalidatePath("/trips/" + tripId);
+  revalidatePath("/trips");
+}
+
+export async function updateArrival(tripId, value) {
+  await assertOwner(tripId);
+  const city = String(value || "").trim();
+  const coords = city ? await geocodeStop(city) : null;
+  await db.trip.update({
+    where: { id: tripId },
+    data: { arrivalCity: city, arrivalLat: coords?.lat ?? null, arrivalLng: coords?.lng ?? null }
+  });
+  revalidatePath("/trips/" + tripId);
+  revalidatePath("/trips");
+}
+
+export async function addLayover(tripId) {
+  await assertOwner(tripId);
+  const last = await db.layover.findFirst({ where: { tripId }, orderBy: { position: "desc" } });
+  await db.layover.create({ data: { tripId, name: "", position: (last?.position ?? -1) + 1 } });
+  revalidatePath("/trips/" + tripId);
+}
+
+export async function updateLayover(id, value) {
+  const layover = await db.layover.findUnique({ where: { id } });
+  if (!layover) throw new Error("NOT_FOUND");
+  await assertOwner(layover.tripId);
+  const name = String(value || "").trim();
+  const coords = name ? await geocodeStop(name) : null;
+  await db.layover.update({ where: { id }, data: { name, lat: coords?.lat ?? null, lng: coords?.lng ?? null } });
+  revalidatePath("/trips/" + layover.tripId);
+  revalidatePath("/trips");
+}
+
+export async function deleteLayover(id) {
+  const layover = await db.layover.findUnique({ where: { id } });
+  if (!layover) return;
+  await assertOwner(layover.tripId);
+  await db.layover.delete({ where: { id } });
+  revalidatePath("/trips/" + layover.tripId);
   revalidatePath("/trips");
 }
 
