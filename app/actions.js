@@ -70,31 +70,23 @@ function placeForDate(destinations, date) {
   return hit?.name || destinations[destinations.length - 1]?.name || "";
 }
 
-// One page per calendar day across a whole itinerary of segments (destinations).
-// - Each segment gets a page for every day it spans.
-// - A segment whose start and end date match (a day trip) always gets its own
-//   page, even when that date is also a neighboring segment's travel day.
-// - Otherwise, where two segments' ranges touch (the travel day between them),
-//   that day is only ever handed out once — to whichever segment comes first.
+// One page per calendar day of each destination's stay, arrival and
+// departure days included. A travel day therefore gets a page in both places:
+// Tokyo (Nov 2–3) then Kyoto (Nov 3–7) gives Nov 3 a Tokyo page — the morning
+// before the train — and a Kyoto page for the arrival. Ordered by date, then
+// by itinerary order on a shared day.
 function buildDayPages(destinations) {
-  const claimed = new Map(); // date (ms) -> place name
-
-  for (const seg of destinations) {
-    if (seg.arrive.getTime() === seg.depart.getTime()) claimed.set(seg.arrive.getTime(), seg.name);
-  }
-  for (const seg of destinations) {
-    if (seg.arrive.getTime() === seg.depart.getTime()) continue;
-    let t = seg.arrive.getTime();
+  const pages = [];
+  destinations.forEach((seg, order) => {
     const end = seg.depart.getTime();
-    for (let n = 0; t <= end && n < MAX_DAY_PAGES; t += 86400000, n++) {
-      if (!claimed.has(t)) claimed.set(t, seg.name);
+    for (let t = seg.arrive.getTime(), n = 0; t <= end && n < MAX_DAY_PAGES; t += 86400000, n++) {
+      pages.push({ date: new Date(t), place: seg.name, order });
     }
-  }
-
-  return [...claimed.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .slice(0, MAX_DAY_PAGES)
-    .map(([t, place]) => ({ date: new Date(t), place }));
+  });
+  return pages
+    .sort((a, b) => a.date - b.date || a.order - b.order)
+    .slice(0, MAX_DAY_PAGES + destinations.length) // shared travel days are extra
+    .map(({ date, place }) => ({ date, place }));
 }
 
 /* ── auth ─────────────────────────────────────────────────────────── */
@@ -590,20 +582,17 @@ export async function addDayPage(tripId, destinationId) {
 
   let date, place;
   if (dest) {
-    const taken = new Set(dayPages.map((p) => p.date.getTime()));
+    // Only this destination's own pages count as taken — a travel day can
+    // have a page in each of the two places (see buildDayPages), so the
+    // neighbouring city's page on that date doesn't fill it.
+    const own = groupPagesByDestination(destinations, dayPages).groups.get(dest.id) || [];
+    const taken = new Set(own.map((p) => p.date.getTime()));
     const end = Math.max(dest.arrive.getTime(), dest.depart.getTime());
     for (let t = dest.arrive.getTime(); t <= end; t += 86400000) {
       if (!taken.has(t)) { date = new Date(t); break; }
     }
-    if (!date) {
-      // Every day of the stay has a page (some may be the neighbouring
-      // destination's, on a shared travel day). Go one past this
-      // destination's own last page, but stay inside its dates while it can.
-      const own = dayPages.filter((p) => p.place.trim().toLowerCase() === dest.name.trim().toLowerCase());
-      const last = own.length ? own[own.length - 1].date.getTime() : dest.arrive.getTime() - 86400000;
-      const t = last + 86400000;
-      date = new Date(t > end && last < end ? end : t);
-    }
+    // Every day of the stay has a page: carry on past its last one.
+    if (!date) date = new Date(Math.max(...own.map((p) => p.date.getTime()), end) + 86400000);
     place = dest.name;
   } else {
     // Always the day after whatever's currently last, so repeat clicks never land on a date that's taken.
