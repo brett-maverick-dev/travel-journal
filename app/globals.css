@@ -340,6 +340,45 @@ a:hover { color: var(--color-accent-300); }
 .bare:hover { border-color: var(--color-divider); }
 
 .page-shell { max-width: 1420px; margin: 0 auto; padding: 30px 34px 90px; }
+
+/* ── trip journal: destination list + page carousel ─────────────────── */
+.dest-item { position: relative; border-radius: var(--radius-md); padding: 2px 8px 8px 0; cursor: pointer;
+  transition: background .16s ease, box-shadow .16s ease; }
+.dest-item:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.dest-item[data-active="1"] { background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-accent); }
+.dest-dot { display: block; width: 9px; height: 9px; border-radius: 50%; background: var(--color-neutral-600);
+  transition: background .16s ease, box-shadow .16s ease; }
+.dest-item:hover .dest-dot { background: var(--color-accent-400); }
+.dest-item[data-active="1"] .dest-dot { background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent), 0 0 10px var(--color-accent); }
+.dest-dot-muted { background: transparent; border: 1.5px solid var(--color-neutral-500); }
+.dest-open { display: inline-flex; align-items: center; gap: 4px; margin-left: 36px; padding: 2px 6px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-neutral-400);
+  font: inherit; font-size: 11px; cursor: pointer; }
+.dest-open:hover, .dest-open[aria-current="true"] { color: var(--color-accent); }
+.dest-open:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+.page-chips { position: relative; display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin;
+  scroll-snap-type: x proximity; }
+.page-chip { flex: 0 0 auto; max-width: 180px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 7px 11px; border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+  background: transparent; color: var(--color-neutral-400); font: inherit; text-align: left; cursor: pointer;
+  scroll-snap-align: start; transition: border-color .16s ease, color .16s ease, background .16s ease; }
+.page-chip:hover { color: var(--color-text); background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.page-chip[aria-current="true"] { color: var(--color-text); border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.page-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.page-chip-date { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.page-chip-title { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.carousel-stage { overflow-x: clip; overflow-clip-margin: 4px; touch-action: pan-y; }
+.carousel-slide { animation-duration: .28s; animation-timing-function: cubic-bezier(.2, .7, .2, 1); animation-fill-mode: both; }
+.carousel-in-next { animation-name: carousel-in-next; }
+.carousel-in-prev { animation-name: carousel-in-prev; }
+@keyframes carousel-in-next { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
+@keyframes carousel-in-prev { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .carousel-slide { animation: none; } }
 @media (max-width: 900px) {
   .split { grid-template-columns: minmax(0, 1fr) !important; }
   .spine { position: static !important; }

@@ -432,17 +432,42 @@ export async function deleteDestination(id) {
 
 /* ── pages ────────────────────────────────────────────────────────── */
 
-export async function addDayPage(tripId) {
+// With a destinationId (the trip page's per-destination "Add a page"), the new
+// page goes to the first day of that destination's stay that has no page yet,
+// or the day after its last page once every day is taken. Without one, it's
+// the day after whatever is currently last in the whole trip.
+export async function addDayPage(tripId, destinationId) {
   const trip = await assertOwner(tripId);
-  const [lastPage, position, destinations] = await Promise.all([
-    db.page.findFirst({ where: { tripId, kind: "DAY" }, orderBy: { date: "desc" } }),
-    db.page.count({ where: { tripId, kind: "DAY" } }),
+  const [dayPages, destinations] = await Promise.all([
+    db.page.findMany({ where: { tripId, kind: "DAY" }, orderBy: { date: "asc" } }),
     db.destination.findMany({ where: { tripId }, orderBy: { position: "asc" } })
   ]);
+  const position = dayPages.length;
+  const dest = destinationId ? destinations.find((d) => d.id === destinationId) : null;
 
-  // Always the day after whatever's currently last, so repeat clicks never land on a date that's taken.
-  const date = lastPage ? new Date(lastPage.date.getTime() + 86400000) : new Date(trip.startDate);
-  const place = placeForDate(destinations, date) || trip.country || "";
+  let date, place;
+  if (dest) {
+    const taken = new Set(dayPages.map((p) => p.date.getTime()));
+    const end = Math.max(dest.arrive.getTime(), dest.depart.getTime());
+    for (let t = dest.arrive.getTime(); t <= end; t += 86400000) {
+      if (!taken.has(t)) { date = new Date(t); break; }
+    }
+    if (!date) {
+      // Every day of the stay has a page (some may be the neighbouring
+      // destination's, on a shared travel day). Go one past this
+      // destination's own last page, but stay inside its dates while it can.
+      const own = dayPages.filter((p) => p.place.trim().toLowerCase() === dest.name.trim().toLowerCase());
+      const last = own.length ? own[own.length - 1].date.getTime() : dest.arrive.getTime() - 86400000;
+      const t = last + 86400000;
+      date = new Date(t > end && last < end ? end : t);
+    }
+    place = dest.name;
+  } else {
+    // Always the day after whatever's currently last, so repeat clicks never land on a date that's taken.
+    const lastPage = dayPages[dayPages.length - 1];
+    date = lastPage ? new Date(lastPage.date.getTime() + 86400000) : new Date(trip.startDate);
+    place = placeForDate(destinations, date) || trip.country || "";
+  }
 
   const page = await db.page.create({
     data: { tripId, kind: "DAY", position, title: "", date, place }
