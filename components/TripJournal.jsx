@@ -16,6 +16,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 //   groups:       { [destId]: [pageId, …] }               in display order
 //   pages:        { [pageId]: { label, title, panel } }   panel: node
 //   addPage:      optional server action (destId) => new page id
+const BOTTOM = 32; // the grid's bottom padding, which the pinned column must clear
+
 export default function TripJournal({
   map, destinations, groups, pages, initialDestId, initialPageId,
   addDestination, addPage, emptyHint, stickyTop = 86
@@ -28,6 +30,7 @@ export default function TripJournal({
   const [adding, startAdding] = useTransition();
   const carouselRef = useRef(null);
   const chipsRef = useRef(null);
+  const listRef = useRef(null);
 
   // Ids can disappear underneath us (a page or destination deleted), so
   // resolve the selection against what's actually there on every render.
@@ -84,6 +87,19 @@ export default function TripJournal({
     }
   }, [pageId]);
 
+  // The list scrolls on its own beside the pinned map; when next/prev moves
+  // into another destination, bring that item into the list's view (the list
+  // only — not the page, which scrollIntoView would also move).
+  useEffect(() => {
+    const list = listRef.current;
+    const item = list?.querySelector(".dest-item[data-active='1']");
+    if (!item || list.scrollHeight <= list.clientHeight) return;
+    const top = item.offsetTop, bottom = top + item.offsetHeight;
+    if (top < list.scrollTop || bottom > list.scrollTop + list.clientHeight) {
+      list.scrollTo({ top: Math.max(0, top - 40), behavior: "smooth" });
+    }
+  }, [destId]);
+
   // Arrow keys flip pages — unless you're typing in one of the page's fields.
   useEffect(() => {
     const onKey = (e) => {
@@ -118,12 +134,20 @@ export default function TripJournal({
   });
 
   return (
-    <div className="page-shell split" style={{ display: "grid", gridTemplateColumns: "308px minmax(0, 1fr)", gap: 48, alignItems: "start" }}>
-      <div className="spine" style={{ position: "sticky", top: stickyTop, display: "flex", flexDirection: "column", gap: 20 }}>
-        {map}
+    <div className="page-shell split" style={{ display: "grid", gridTemplateColumns: "308px minmax(0, 1fr)", gap: 48, alignItems: "start", paddingBottom: BOTTOM }}>
+      {/* Pinned at the top while the page scrolls, and never taller than the
+          window: the map and heading stay put and only the list scrolls. It
+          also has to fit above the grid's bottom padding — a sticky box that
+          doesn't gets pushed up at the very end of the page. */}
+      <div className="spine" style={{
+        position: "sticky", top: stickyTop, display: "flex", flexDirection: "column", gap: 20,
+        maxHeight: "calc(100vh - " + (stickyTop + BOTTOM + 8) + "px)"
+      }}>
+        <div style={{ flex: "none" }}>{map}</div>
 
-        <div>
-          <h6 className="text-muted" style={{ margin: "0 0 12px" }}>Destinations</h6>
+        <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: "1 1 auto" }}>
+          <h6 className="text-muted" style={{ margin: "0 0 12px", flex: "none" }}>Destinations</h6>
+          <div ref={listRef} className="spine-list">
           {destinations.map((d) => {
             const count = groups[d.id]?.length || 0;
             const active = d.id === destId;
@@ -143,6 +167,7 @@ export default function TripJournal({
             );
           })}
           {!destinations.some((d) => d.id === "return") && addDestination}
+          </div>
         </div>
       </div>
 

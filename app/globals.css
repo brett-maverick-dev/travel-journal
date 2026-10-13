@@ -342,6 +342,13 @@ a:hover { color: var(--color-accent-300); }
 .page-shell { max-width: 1420px; margin: 0 auto; padding: 30px 34px 90px; }
 
 /* ── trip journal: destination list + page carousel ─────────────────── */
+.spine-list { position: relative; overflow-y: auto; overscroll-behavior: contain; min-height: 0;
+  padding: 2px 6px 12px 0; scrollbar-width: thin; scrollbar-color: var(--color-neutral-700) transparent;
+  /* fade the bottom edge so it reads as "more below" */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); }
+.spine-list::-webkit-scrollbar { width: 6px; }
+.spine-list::-webkit-scrollbar-thumb { background: var(--color-neutral-700); border-radius: 3px; }
 .dest-item { position: relative; border-radius: var(--radius-md); padding: 2px 8px 8px 0; cursor: pointer;
   transition: background .16s ease, box-shadow .16s ease; }
 .dest-item:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
@@ -381,7 +388,8 @@ a:hover { color: var(--color-accent-300); }
 @media (prefers-reduced-motion: reduce) { .carousel-slide { animation: none; } }
 @media (max-width: 900px) {
   .split { grid-template-columns: minmax(0, 1fr) !important; }
-  .spine { position: static !important; }
+  .spine { position: static !important; max-height: none !important; }
+  .spine-list { overflow: visible !important; padding-right: 0 !important; mask-image: none; -webkit-mask-image: none; }
 }
 .dest-action { width: 26px; height: 26px; color: var(--color-neutral-500); opacity: 0; transition: opacity .16s ease; }
 .dest-item:hover .dest-action, .dest-item[data-active="1"] .dest-action, .dest-action:focus-visible { opacity: 1; }
