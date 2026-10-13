@@ -59,8 +59,8 @@ export default function NewTripDialog() {
               </div>
             </div>
             <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>
-              Optional — adds a pin for where you're leaving from. The first destination's
-              "Getting there" below describes travel from here.
+              Optional — shown above your destinations, with no pages of its own. The first
+              destination's "Getting there" below describes travel from here.
             </p>
 
             <h6 className="text-muted" style={{ margin: "8px 0 0" }}>Destinations</h6>

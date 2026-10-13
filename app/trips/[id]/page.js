@@ -10,10 +10,11 @@ import AddButton from "./AddButton";
 import DeleteTripButton from "./DeleteTripButton";
 import DeletePageButton from "@/components/DeletePageButton";
 import TripBuddies from "./TripBuddies";
+import DestinationActions from "./DestinationActions";
 import TripJournal from "@/components/TripJournal";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage } from "@/app/actions";
+import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture } from "@/app/actions";
 import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP } from "@/lib/pages";
 
@@ -52,7 +53,27 @@ export default async function TripPage({ params, searchParams }) {
   const activitiesFor = (dayId) => trip.pages.filter((p) => p.kind === "ACTIVITY" && p.parentId === dayId);
   const { groups, other } = groupPagesByDestination(trip.destinations, days);
 
-  const journalDestinations = trip.destinations.map((d) => ({
+  const departure = (
+    <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "center", paddingTop: 9 }}>
+        <i className="ph ph-house-line" style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        <span className="text-muted" style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", paddingLeft: 4 }}>Leaving from</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <Field value={trip.departureCity} placeholder="Home city (optional)" save={updateDeparture.bind(null, trip.id, "city")}
+            style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
+          {trip.departureCity && (
+            <Field type="date" value={trip.departureDate ? inputDate(trip.departureDate) : ""}
+              save={updateDeparture.bind(null, trip.id, "date")}
+              style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const journalDestinations = trip.destinations.map((d, i) => ({
     id: d.id,
     name: d.name,
     dates: fmt(d.arrive) + " – " + fmt(d.depart) + " · " + nights(d.arrive, d.depart),
@@ -86,6 +107,7 @@ export default async function TripPage({ params, searchParams }) {
               save={updateDestination.bind(null, d.id, "transport")}
               style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1 }} />
             <span style={{ fontSize: 11, color: "var(--color-accent-300)", whiteSpace: "nowrap" }}>{nights(d.arrive, d.depart)}</span>
+            <DestinationActions destinationId={d.id} name={d.name} canMakeDeparture={i === 0 && !trip.departureCity} />
           </div>
           {d.lat == null && (
             <span className="text-muted" style={{ fontSize: 10 }}>Not found on the map — try a fuller place name.</span>
@@ -226,6 +248,8 @@ export default async function TripPage({ params, searchParams }) {
         initialDestId={initialDestId}
         initialPageId={initialPageId}
         addPage={addDayPage.bind(null, trip.id)}
+        departure={departure}
+        departureSet={Boolean(trip.departureCity)}
         emptyHint="No pages for this destination yet."
         addDestination={
           <AddButton action={addDestination.bind(null, trip.id)} label="Add destination"

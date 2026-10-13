@@ -68,6 +68,11 @@ model Trip {
   startDate    DateTime
   endDate      DateTime
   coverUrl     String?
+  // Where the trip starts from. Kept off the destination list on purpose — it
+  // gets no pages of its own; the first destination's transport describes
+  // the leg from here.
+  departureCity String       @default("")
+  departureDate DateTime?
   createdAt    DateTime      @default(now())
   destinations Destination[]
   pages        Page[]

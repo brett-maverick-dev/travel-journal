@@ -157,6 +157,18 @@ export default async function PublicTrip({ params, searchParams }) {
         initialDestId={initialDestId}
         initialPageId={groupOf(wantPage) ? wantPage : null}
         emptyHint="Nothing written for this stop yet."
+        departureSet={Boolean(trip.departureCity)}
+        departure={trip.departureCity ? (
+          <div style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr)", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "center", paddingTop: 2 }}>
+              <i className="ph ph-house-line" style={{ fontSize: 14, color: "var(--color-neutral-400)" }} />
+            </div>
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              Leaving from <span style={{ color: "var(--color-text)" }}>{trip.departureCity}</span>
+              {trip.departureDate ? " · " + fmt(trip.departureDate) : ""}
+            </div>
+          </div>
+        ) : null}
         stickyTop={30}
       />
       <p className="text-muted page-shell" style={{ fontSize: 12, paddingTop: 0 }}>

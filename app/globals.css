@@ -383,3 +383,7 @@ a:hover { color: var(--color-accent-300); }
   .split { grid-template-columns: minmax(0, 1fr) !important; }
   .spine { position: static !important; }
 }
+.dest-action { width: 26px; height: 26px; color: var(--color-neutral-500); opacity: 0; transition: opacity .16s ease; }
+.dest-item:hover .dest-action, .dest-item[data-active="1"] .dest-action, .dest-action:focus-visible { opacity: 1; }
+.dest-action:hover { color: var(--color-accent); }
+@media (hover: none) { .dest-action { opacity: 1; } }

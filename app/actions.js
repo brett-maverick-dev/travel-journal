@@ -10,6 +10,7 @@ import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
 import { saveUpload } from "@/lib/storage";
 import { geocode } from "@/lib/geo";
 import { snapshotDatabase } from "@/lib/backup";
+import { groupPagesByDestination } from "@/lib/pages";
 
 const code6 = () => String(randomInt(100000, 1000000));
 
@@ -288,23 +289,28 @@ export async function createTrip(_prev, form) {
   if (endDate < startDate) return { error: "The trip can't end before it starts." };
   const visibility = form.get("visibility") === "PUBLIC" ? "PUBLIC" : "PRIVATE";
 
-  const destPlaces = form.getAll("place").map(String).map((s) => s.trim()).filter(Boolean);
-  const destArrivals = form.getAll("arrive").map(String);
-  const destTransports = form.getAll("transport").map(String);
+  // One row per destination in the dialog; drop blank rows as a whole so a
+  // skipped row can't shift later rows' dates and transport out of line.
+  const rawArrivals = form.getAll("arrive").map(String);
+  const rawTransports = form.getAll("transport").map(String);
+  const stops = form.getAll("place").map((p, i) => ({
+    place: String(p).trim(), arrive: rawArrivals[i], transport: rawTransports[i]
+  })).filter((r) => r.place);
+  const places = stops.map((r) => r.place);
+  const arrivals = stops.map((r) => r.arrive);
+  const transports = stops.map((r) => r.transport);
 
-  // The departure city is optional and becomes destination 0 — the first real
-  // destination's own "Getting there" (already collected per-stop) then reads
-  // as "how you got there from here", with no separate transport field needed
-  // for the departure entry itself.
+  // The departure city is optional and stored on the trip, not as a
+  // destination — it gets no day pages. The first destination's own "Getting
+  // there" reads as the leg from it.
   const departureCity = String(form.get("departureCity") || "").trim();
-  const departureDate = String(form.get("departureDate") || "");
-
-  const places = departureCity ? [departureCity, ...destPlaces] : destPlaces;
-  const arrivals = departureCity ? [departureDate, ...destArrivals] : destArrivals;
-  const transports = departureCity ? ["", ...destTransports] : destTransports;
+  const departureDate = departureCity ? parseDate(form.get("departureDate")) : null;
 
   const trip = await db.trip.create({
-    data: { userId: user.id, name, startDate, endDate, visibility, country: destPlaces[0] || "" }
+    data: {
+      userId: user.id, name, startDate, endDate, visibility, country: places[0] || "",
+      departureCity, departureDate
+    }
   });
 
   const destinations = [];
@@ -422,12 +428,75 @@ export async function updateDestination(id, field, value) {
   revalidatePath("/trips");
 }
 
+export async function updateDeparture(tripId, field, value) {
+  await assertOwner(tripId);
+  let data;
+  if (field === "city") {
+    data = { departureCity: String(value || "").trim() };
+  } else if (field === "date") {
+    const date = parseDate(value);
+    if (!date) return { error: "Pick a date." };
+    data = { departureDate: date };
+  } else {
+    throw new Error("BAD_FIELD");
+  }
+  await db.trip.update({ where: { id: tripId }, data });
+  revalidatePath("/trips/" + tripId);
+}
+
+// Removes a destination along with the day pages that belong only to it and
+// are still blank. Pages with anything written in them (text, photos, an
+// activity) are kept — they show up wherever their date or place now fits,
+// or under "Other pages".
+async function removeDestinationAndBlankPages(dest) {
+  const [destinations, dayPages] = await Promise.all([
+    db.destination.findMany({ where: { tripId: dest.tripId }, orderBy: { position: "asc" } }),
+    db.page.findMany({
+      where: { tripId: dest.tripId, kind: "DAY" },
+      include: { _count: { select: { photos: true } } }
+    })
+  ]);
+  const { groups } = groupPagesByDestination(destinations, dayPages);
+  const mine = groups.get(dest.id) || [];
+  const withActivities = new Set((await db.page.findMany({
+    where: { tripId: dest.tripId, kind: "ACTIVITY", parentId: { in: mine.map((p) => p.id) } },
+    select: { parentId: true }
+  })).map((a) => a.parentId));
+  const blank = mine.filter((p) =>
+    !p.title && !p.notes && !p.weather && !p.spend && !p.steps && !p.tags &&
+    p._count.photos === 0 && !withActivities.has(p.id));
+
+  await db.$transaction([
+    db.page.deleteMany({ where: { id: { in: blank.map((p) => p.id) } } }),
+    db.destination.delete({ where: { id: dest.id } })
+  ]);
+  return { removedPages: blank.length, keptPages: mine.length - blank.length };
+}
+
 export async function deleteDestination(id) {
   const dest = await db.destination.findUnique({ where: { id } });
   if (!dest) return;
   await assertOwner(dest.tripId);
-  await db.destination.delete({ where: { id } });
+  const result = await removeDestinationAndBlankPages(dest);
   revalidatePath("/trips/" + dest.tripId);
+  revalidatePath("/trips");
+  return { ok: true, ...result };
+}
+
+// For trips created before the departure city stopped being a destination:
+// turns the first destination back into the trip's departure city.
+export async function makeDeparture(id) {
+  const dest = await db.destination.findUnique({ where: { id } });
+  if (!dest) return;
+  await assertOwner(dest.tripId);
+  await db.trip.update({
+    where: { id: dest.tripId },
+    data: { departureCity: dest.name, departureDate: dest.arrive }
+  });
+  const result = await removeDestinationAndBlankPages(dest);
+  revalidatePath("/trips/" + dest.tripId);
+  revalidatePath("/trips");
+  return { ok: true, ...result };
 }
 
 /* ── pages ────────────────────────────────────────────────────────── */

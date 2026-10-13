@@ -13,9 +13,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 //   groups:       { [destId]: [pageId, …] }               in display order
 //   pages:        { [pageId]: { label, title, panel } }   panel: node
 //   addPage:      optional server action (destId) => new page id
+//   departure:    optional "Leaving from" node above the list; with
+//                 departureSet, the first destination's connector (its
+//                 "Getting there") is drawn too, as the leg from there
 export default function TripJournal({
   map, destinations, groups, pages, initialDestId, initialPageId,
-  addDestination, addPage, emptyHint, stickyTop = 86
+  addDestination, addPage, emptyHint, stickyTop = 86, departure, departureSet
 }) {
   const [sel, setSel] = useState(() => ({
     destId: initialDestId,
@@ -121,12 +124,13 @@ export default function TripJournal({
 
         <div>
           <h6 className="text-muted" style={{ margin: "0 0 12px" }}>Destinations</h6>
+          {departure}
           {destinations.map((d, i) => {
             const count = groups[d.id]?.length || 0;
             const active = d.id === destId;
             return (
               <div key={d.id}>
-                {i > 0 && d.connector}
+                {(i > 0 || departureSet) && d.connector}
                 <div className="dest-item" data-active={active ? "1" : "0"} onClick={() => pickDestination(d.id)}>
                   {d.row}
                   <button type="button" className="dest-open" aria-current={active ? "true" : undefined}
