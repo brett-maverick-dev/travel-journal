@@ -4,6 +4,7 @@ import UserRow from "./UserRow";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { searchUsers, normalizeQuery } from "@/lib/user-search";
+import { suggestBuddies, mutualLabel } from "@/lib/buddy-suggestions";
 
 function Section({ title, children }) {
   return (
@@ -38,6 +39,7 @@ export default async function Buddies({ searchParams }) {
   for (const r of rows) relation.set(other(r).id, r);
 
   const results = query ? await searchUsers(query, user.id) : [];
+  const suggestions = await suggestBuddies(user.id);
   const tooShort = query && results.length === 0 && normalizeQuery(query).term.length < 2 && !normalizeQuery(query).email;
 
   return (
@@ -73,6 +75,14 @@ export default async function Buddies({ searchParams }) {
         {incoming.length > 0 && (
           <Section title={"Requests (" + incoming.length + ")"}>
             {incoming.map((r) => <UserRow key={r.id} user={other(r)} relation={r} me={user.id} />)}
+          </Section>
+        )}
+
+        {suggestions.length > 0 && (
+          <Section title="People you may know">
+            {suggestions.map(({ user: u, mutual }) => (
+              <UserRow key={u.id} user={u} relation={null} me={user.id} hint={mutualLabel(mutual)} />
+            ))}
           </Section>
         )}
 
