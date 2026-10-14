@@ -1,7 +1,7 @@
 import Link from "next/link";
 import BuddyActions from "./BuddyActions";
 
-export default function UserRow({ user, relation, me }) {
+export default function UserRow({ user, relation, me, hint }) {
   const status = relation?.status;
   const isRequester = relation?.requesterId === me;
   const initials = (user.name || user.handle || "?").slice(0, 2).toUpperCase();
@@ -19,7 +19,10 @@ export default function UserRow({ user, relation, me }) {
         </span>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 500 }}>{user.name || user.handle}</div>
-          <div className="text-muted" style={{ fontSize: 12 }}>@{user.handle}</div>
+          <div className="text-muted" style={{ fontSize: 12 }}>
+            @{user.handle}
+            {hint && <span style={{ color: "var(--color-accent-300)" }}> · {hint}</span>}
+          </div>
         </div>
       </Link>
       <BuddyActions targetId={user.id} status={status} isRequester={isRequester} rowId={relation?.id} />

@@ -3,6 +3,7 @@ import Nav from "@/components/Nav";
 import UserRow from "./UserRow";
 import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
+import { searchUsers, normalizeQuery } from "@/lib/user-search";
 
 function Section({ title, children }) {
   return (
@@ -36,15 +37,8 @@ export default async function Buddies({ searchParams }) {
   const relation = new Map();
   for (const r of rows) relation.set(other(r).id, r);
 
-  const results = query
-    ? await db.user.findMany({
-        where: {
-          id: { not: user.id },
-          OR: [{ handle: { contains: query } }, { name: { contains: query } }]
-        },
-        take: 12
-      })
-    : [];
+  const results = query ? await searchUsers(query, user.id) : [];
+  const tooShort = query && results.length === 0 && normalizeQuery(query).term.length < 2 && !normalizeQuery(query).email;
 
   return (
     <>
@@ -58,14 +52,21 @@ export default async function Buddies({ searchParams }) {
         <div className="card elev-sm" style={{ padding: 20, gap: 12, marginBottom: 26 }}>
           <h6 className="text-muted" style={{ margin: 0 }}>Find a travel buddy</h6>
           <form style={{ display: "flex", gap: 8 }}>
-            <input className="input" name="q" defaultValue={query} placeholder="Search by name or @handle" style={{ flex: 1 }} />
+            <input className="input" name="q" type="search" defaultValue={query} style={{ flex: 1 }}
+              placeholder="Name, @username, social handle or email address" aria-label="Search for people" />
             <button className="btn btn-secondary" type="submit">Search</button>
           </form>
-          {query && results.length === 0 && (
+          <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>
+            Paste a profile link to search by its handle. Email addresses have to match exactly.
+          </p>
+          {tooShort && (
+            <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>Type at least 2 characters.</p>
+          )}
+          {query && !tooShort && results.length === 0 && (
             <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>No one matches "{query}".</p>
           )}
-          {results.map((u) => (
-            <UserRow key={u.id} user={u} relation={relation.get(u.id)} me={user.id} />
+          {results.map(({ user: u, matchedBy }) => (
+            <UserRow key={u.id} user={u} relation={relation.get(u.id)} me={user.id} hint={matchedBy && "Matched " + matchedBy} />
           ))}
         </div>
 
