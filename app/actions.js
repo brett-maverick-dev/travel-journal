@@ -6,7 +6,9 @@ import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { createSession, destroySession, currentUser, requireUser, isAdminUser } from "@/lib/session";
-import { sendVerificationCode, sendPasswordReset } from "@/lib/mail";
+import { sendVerificationCode, sendPasswordReset, sendBuddyRequestEmail } from "@/lib/mail";
+import { signBuddyToken, verifyBuddyToken } from "@/lib/buddy-token";
+import { appUrl } from "@/lib/app-url";
 import { saveUpload } from "@/lib/storage";
 import { geocode, geocodeStop } from "@/lib/geo";
 import { snapshotDatabase, deleteBackup } from "@/lib/backup";
@@ -930,7 +932,7 @@ export async function sendBuddyRequest(targetUserId) {
   const me = await requireUser();
   if (targetUserId === me.id) return { error: "That's you." };
   const target = await db.user.findUnique({ where: { id: targetUserId } });
-  if (!target) return { error: "User not found." };
+  if (!target || !target.verified) return { error: "User not found." };
 
   const existing = await findBuddyRow(me.id, targetUserId);
   if (existing) {
@@ -938,9 +940,46 @@ export async function sendBuddyRequest(targetUserId) {
     if (existing.status === "ACCEPTED") return { error: "You're already travel buddies." };
     return { error: "A request is already pending." };
   }
-  await db.buddy.create({ data: { requesterId: me.id, addresseeId: targetUserId, status: "PENDING" } });
+  const request = await db.buddy.create({ data: { requesterId: me.id, addresseeId: targetUserId, status: "PENDING" } });
+
+  // Email them links to answer it. Not awaited: a slow or failing mail server
+  // shouldn't hold up (or undo) the request, which is on their Buddies page
+  // either way. send() logs its own failures.
+  const base = await appUrl();
+  const token = await signBuddyToken(request.id, target.id);
+  const link = (choice) => base + "/buddies/respond?t=" + encodeURIComponent(token) + "&do=" + choice;
+  sendBuddyRequestEmail(target.email, {
+    fromName: me.name, fromHandle: me.handle, profileUrl: base + "/u/" + me.handle,
+    links: { accept: link("accept"), decline: link("decline"), block: link("block") }
+  }).catch((err) => console.error("[trekkster] buddy request email failed: " + err.message));
+
   revalidatePath("/buddies");
   return { ok: true };
+}
+
+// The confirmation page that a buddy-request email links to posts here. The
+// signed token stands in for signing in: it names one request and the person
+// it was sent to, and only works while that request is still pending.
+export async function respondToBuddyEmail(form) {
+  const token = String(form.get("t") || "");
+  const choice = String(form.get("choice") || "");
+  if (!["accept", "decline", "block"].includes(choice)) throw new Error("BAD_CHOICE");
+  const claim = await verifyBuddyToken(token);
+  const back = "/buddies/respond?t=" + encodeURIComponent(token);
+  if (!claim) redirect(back);
+
+  const row = await db.buddy.findUnique({ where: { id: claim.requestId } });
+  if (!row || row.status !== "PENDING" || row.addresseeId !== claim.addresseeId) redirect(back);
+
+  if (choice === "accept") {
+    await db.buddy.update({ where: { id: row.id }, data: { status: "ACCEPTED" } });
+  } else if (choice === "decline") {
+    await db.buddy.delete({ where: { id: row.id } });
+  } else {
+    await blockPair(row.addresseeId, row.requesterId);
+  }
+  revalidatePath("/buddies");
+  redirect(back + "&done=" + choice);
 }
 
 export async function acceptBuddyRequest(rowId) {
@@ -977,29 +1016,33 @@ export async function removeBuddy(rowId) {
   return { ok: true };
 }
 
+// meId blocks targetUserId: the pair's one row becomes a block owned by meId
+// (shared trips between them are revoked either way).
+async function blockPair(meId, targetUserId) {
+  const existing = await findBuddyRow(meId, targetUserId);
+  if (existing?.status === "BLOCKED" && existing.requesterId !== meId) {
+    // They already blocked you. Leave their block in place — taking the row
+    // over would let you unblock it and erase their block entirely.
+    await revokeSharedTrips(meId, targetUserId);
+    return;
+  }
+  if (existing) {
+    await db.buddy.update({
+      where: { id: existing.id },
+      data: { requesterId: meId, addresseeId: targetUserId, status: "BLOCKED" }
+    });
+  } else {
+    await db.buddy.create({ data: { requesterId: meId, addresseeId: targetUserId, status: "BLOCKED" } });
+  }
+  await revokeSharedTrips(meId, targetUserId);
+}
+
 export async function blockUser(targetUserId) {
   const me = await requireUser();
   if (targetUserId === me.id) return { error: "That's you." };
   const target = await db.user.findUnique({ where: { id: targetUserId } });
   if (!target) return { error: "User not found." };
-
-  const existing = await findBuddyRow(me.id, targetUserId);
-  if (existing?.status === "BLOCKED" && existing.requesterId !== me.id) {
-    // They already blocked you. Leave their block in place — taking the row
-    // over would let you unblock it and erase their block entirely.
-    await revokeSharedTrips(me.id, targetUserId);
-    revalidatePath("/buddies");
-    return { ok: true };
-  }
-  if (existing) {
-    await db.buddy.update({
-      where: { id: existing.id },
-      data: { requesterId: me.id, addresseeId: targetUserId, status: "BLOCKED" }
-    });
-  } else {
-    await db.buddy.create({ data: { requesterId: me.id, addresseeId: targetUserId, status: "BLOCKED" } });
-  }
-  await revokeSharedTrips(me.id, targetUserId);
+  await blockPair(me.id, targetUserId);
   revalidatePath("/buddies");
   return { ok: true };
 }
