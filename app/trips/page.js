@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import { fmtRange, mapStops, TRANSPORT_ICON, coverFrame } from "@/lib/format";
 import { withDepartureCoords } from "@/lib/geo";
+import { ROLE_LABEL, normalizeRole } from "@/lib/permissions";
 
 export default async function Trips() {
   const user = await currentUser();
@@ -16,6 +17,7 @@ export default async function Trips() {
     orderBy: { startDate: "desc" },
     include: {
       user: true,
+      buddies: { select: { userId: true, role: true } },
       destinations: { orderBy: { position: "asc" } },
       layovers: { orderBy: { position: "asc" } },
       pages: { select: { id: true } }
@@ -35,6 +37,7 @@ export default async function Trips() {
     href: "/trips/" + t.id,
     pageLine: t.destinations.length + " destinations · " + t.pages.length + " pages",
     sharedBy: t.userId === user.id ? null : t.user.handle,
+    myRole: t.userId === user.id ? null : ROLE_LABEL[normalizeRole(t.buddies.find((b) => b.userId === user.id)?.role)],
     stops: mapStops(t, (d) => ({ icon: TRANSPORT_ICON[d.transport] || "ph-path" }))
   }));
 

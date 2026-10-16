@@ -7,12 +7,21 @@ import Field from "./Field";
 import PhotoImage from "./PhotoImage";
 import PhotoLightbox from "./PhotoLightbox";
 
-// A page's photo grid. Click a photo to enlarge it. With canEdit: add
+// A page's photo grid. Click a photo to enlarge it.
+//
+//   canUpload   add photos; and rotate, describe or remove your own
+//   canEditAll  all of that for anyone's photos, plus reordering
+//   meId, ownerId  who "your own" is — photos from before uploaders were
+//               recorded (uploadedById null) count as the trip owner's
+//
+// With canEditAll, the old behaviour in full: add
 // photos, drag them into a new order (by the grip handle, with a mouse or
 // finger, or with the arrow keys while it's focused), turn them upright
 // (rotate left/right), remove them, and write a description under each;
 // without it (the public trip view), descriptions are shown as text.
-export default function Photos({ pageId, photos, canEdit }) {
+export default function Photos({ pageId, photos, canUpload = false, canEditAll = false, meId, ownerId }) {
+  const canEdit = canEditAll; // reordering and the drag handle
+  const mine = (p) => canEditAll || (canUpload && (p.uploadedById ?? ownerId) === meId);
   const [state, action, pending] = useActionState(uploadPhotos, null);
   const [shrinking, setShrinking] = useState(false);
   const [open, setOpen] = useState(null); // index of the enlarged photo
@@ -164,7 +173,7 @@ export default function Photos({ pageId, photos, canEdit }) {
                   <i className="ph ph-dots-six-vertical" />
                 </button>
               )}
-              {canEdit && (
+              {mine(p) && (
                 <span className="photo-actions" onClick={(e) => e.stopPropagation()}>
                   <button type="button" className="btn btn-icon" aria-label="Rotate left" title="Rotate left"
                     onClick={() => rotate(p, -90)}><i className="ph ph-arrow-counter-clockwise" /></button>
@@ -175,7 +184,7 @@ export default function Photos({ pageId, photos, canEdit }) {
                 </span>
               )}
             </div>
-            {canEdit ? (
+            {mine(p) ? (
               <Field as="textarea" rows={2} value={p.caption} placeholder="Add a description…"
                 save={updatePhoto.bind(null, p.id, "caption")}
                 style={{ fontSize: 12, lineHeight: 1.45, padding: "6px 8px", minHeight: 0, resize: "vertical" }} />
@@ -184,7 +193,7 @@ export default function Photos({ pageId, photos, canEdit }) {
             ) : null}
           </figure>
         ))}
-        {canEdit && (
+        {canUpload && (
           <form action={action} style={{ aspectRatio: "4 / 3" }}>
             <input type="hidden" name="pageId" value={pageId} />
             <label className="dashed" style={{
@@ -203,7 +212,7 @@ export default function Photos({ pageId, photos, canEdit }) {
 
       {open != null && shown[open] && (
         <PhotoLightbox photos={shown} index={open} onIndex={setOpen} onClose={() => setOpen(null)}
-          onRotate={canEdit ? rotate : null} />
+          onRotate={(photo, delta) => { if (mine(photo)) rotate(photo, delta); }} canRotate={mine} />
       )}
     </div>
   );

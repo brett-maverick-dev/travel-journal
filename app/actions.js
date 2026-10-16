@@ -9,6 +9,7 @@ import { createSession, destroySession, currentUser, requireUser, isAdminUser } 
 import { sendVerificationCode, sendPasswordReset, sendBuddyRequestEmail } from "@/lib/mail";
 import { signBuddyToken, verifyBuddyToken } from "@/lib/buddy-token";
 import { appUrl } from "@/lib/app-url";
+import { can, tripRole, canManageRole, normalizeRole, SHAREABLE_ROLES } from "@/lib/permissions";
 import { saveUpload } from "@/lib/storage";
 import { geocode, geocodeStop } from "@/lib/geo";
 import { snapshotDatabase, deleteBackup } from "@/lib/backup";
@@ -36,25 +37,28 @@ async function uniqueHandle(email) {
   return handle;
 }
 
-// Owner or trip buddy — trip buddies are full collaborators, so this covers
-// every content edit (destinations, pages, photos, rename, cover, visibility).
-async function assertOwner(tripId) {
+// The signed-in user's level on a trip, refused unless it allows `ability`
+// (see lib/permissions.js for what each level may do).
+async function assertCan(tripId, ability) {
   const user = await requireUser();
-  const trip = await db.trip.findUnique({ where: { id: tripId } });
-  if (!trip) throw new Error("FORBIDDEN");
-  if (trip.userId === user.id) return trip;
-  const shared = await db.tripBuddy.findFirst({ where: { tripId, userId: user.id } });
-  if (!shared) throw new Error("FORBIDDEN");
-  return trip;
+  const trip = await db.trip.findUnique({ where: { id: String(tripId || "") } });
+  const role = await tripRole(trip, user.id, db);
+  if (!can(role, ability)) throw new Error("FORBIDDEN");
+  return { trip, user, role };
 }
 
-// Literal owner only — for deleting the trip and managing who has access to
-// it, neither of which should be delegable to a collaborator.
-async function assertTripOwner(tripId) {
-  const user = await requireUser();
-  const trip = await db.trip.findUnique({ where: { id: tripId } });
-  if (!trip || trip.userId !== user.id) throw new Error("FORBIDDEN");
-  return trip;
+// Photos: anyone who can edit may change any of them; a Contributor only
+// their own (photos from before uploaders were recorded count as the owner's).
+function canManagePhoto(role, photo, user, trip) {
+  if (can(role, "edit")) return true;
+  const uploader = photo.uploadedById ?? trip.userId;
+  return can(role, "upload") && uploader === user.id;
+}
+
+async function assertPhotoAccess(photo) {
+  const { trip, user, role } = await assertCan(photo.page.tripId, "upload");
+  if (!canManagePhoto(role, photo, user, trip)) throw new Error("FORBIDDEN");
+  return { trip, user, role };
 }
 
 async function assertAdmin() {
@@ -405,7 +409,7 @@ export async function createTrip(_prev, form) {
 
 export async function setVisibility(tripId, visibility) {
   if (visibility !== "PUBLIC" && visibility !== "PRIVATE") throw new Error("BAD_VISIBILITY");
-  await assertOwner(tripId);
+  await assertCan(tripId, "visibility");
   await db.trip.update({ where: { id: tripId }, data: { visibility } });
   revalidatePath("/trips/" + tripId);
   revalidatePath("/trips");
@@ -413,7 +417,7 @@ export async function setVisibility(tripId, visibility) {
 
 export async function renameTrip(tripId, name) {
   const clean = String(name || "").trim() || "Untitled trip";
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   await db.trip.update({ where: { id: tripId }, data: { name: clean } });
   revalidatePath("/trips/" + tripId);
 }
@@ -425,6 +429,7 @@ export async function renameTrip(tripId, name) {
 function deleteTripsTx(where) {
   const trip = { trip: where };
   return [
+    db.comment.deleteMany({ where: { page: trip } }),
     db.photo.deleteMany({ where: { page: trip } }),
     db.page.deleteMany({ where: trip }),
     db.destination.deleteMany({ where: trip }),
@@ -435,20 +440,26 @@ function deleteTripsTx(where) {
 }
 
 export async function deleteTrip(tripId) {
-  await assertTripOwner(tripId);
+  await assertCan(tripId, "deleteTrip");
   await db.$transaction(deleteTripsTx({ id: tripId }));
   revalidatePath("/trips");
   redirect("/trips");
 }
 
-export async function addTripBuddy(tripId, buddyUserId) {
-  const trip = await assertTripOwner(tripId);
+// Adding someone to a trip, at a level. You must be travel buddies with
+// them yourself, and may only hand out levels you're allowed to manage (the
+// owner any; Full access anything below Full access).
+export async function addTripBuddy(tripId, buddyUserId, role = "EDITOR") {
+  const { trip, user, role: myRole } = await assertCan(tripId, "managePeople");
+  const level = normalizeRole(role);
+  if (!canManageRole(myRole, level)) return { error: "Only the owner can give Full access." };
+  if (buddyUserId === trip.userId) return { error: "That's the trip's owner." };
   const isBuddy = await db.buddy.findFirst({
     where: {
       status: "ACCEPTED",
       OR: [
-        { requesterId: trip.userId, addresseeId: buddyUserId },
-        { requesterId: buddyUserId, addresseeId: trip.userId }
+        { requesterId: user.id, addresseeId: buddyUserId },
+        { requesterId: buddyUserId, addresseeId: user.id }
       ]
     }
   });
@@ -457,14 +468,37 @@ export async function addTripBuddy(tripId, buddyUserId) {
   const existing = await db.tripBuddy.findFirst({ where: { tripId, userId: buddyUserId } });
   if (existing) return { error: "Already added." };
 
-  await db.tripBuddy.create({ data: { tripId, userId: buddyUserId } });
+  await db.tripBuddy.create({ data: { tripId, userId: buddyUserId, role: level } });
   revalidatePath("/trips/" + tripId);
   return { ok: true };
 }
 
+export async function setTripBuddyRole(tripId, buddyUserId, role) {
+  const { role: myRole } = await assertCan(tripId, "managePeople");
+  if (!SHAREABLE_ROLES.includes(role)) throw new Error("BAD_ROLE");
+  const row = await db.tripBuddy.findFirst({ where: { tripId, userId: buddyUserId } });
+  if (!row) return { error: "They're not on this trip anymore." };
+  if (!canManageRole(myRole, normalizeRole(row.role)) || !canManageRole(myRole, role)) {
+    return { error: "Only the owner can change Full access." };
+  }
+  await db.tripBuddy.update({ where: { id: row.id }, data: { role } });
+  revalidatePath("/trips/" + tripId);
+  return { ok: true };
+}
+
+// Removes someone from a trip — or, with your own id, leaves it (anyone can).
 export async function removeTripBuddy(tripId, buddyUserId) {
-  await assertTripOwner(tripId);
-  await db.tripBuddy.deleteMany({ where: { tripId, userId: buddyUserId } });
+  const user = await requireUser();
+  const row = await db.tripBuddy.findFirst({ where: { tripId, userId: buddyUserId } });
+  if (buddyUserId === user.id) {
+    if (row) await db.tripBuddy.delete({ where: { id: row.id } });
+    revalidatePath("/trips");
+    redirect("/trips");
+  }
+  const { role: myRole } = await assertCan(tripId, "managePeople");
+  if (!row) return { ok: true };
+  if (!canManageRole(myRole, normalizeRole(row.role))) return { error: "Only the owner can remove Full access." };
+  await db.tripBuddy.delete({ where: { id: row.id } });
   revalidatePath("/trips/" + tripId);
   return { ok: true };
 }
@@ -472,7 +506,7 @@ export async function removeTripBuddy(tripId, buddyUserId) {
 /* ── destinations ─────────────────────────────────────────────────── */
 
 export async function addDestination(tripId) {
-  const trip = await assertOwner(tripId);
+  const { trip } = await assertCan(tripId, "edit");
   const count = await db.destination.count({ where: { tripId } });
   await db.destination.create({
     data: {
@@ -486,7 +520,7 @@ export async function addDestination(tripId) {
 export async function updateDestination(id, field, value) {
   const dest = await db.destination.findUnique({ where: { id } });
   if (!dest) throw new Error("NOT_FOUND");
-  await assertOwner(dest.tripId);
+  await assertCan(dest.tripId, "edit");
 
   const data = {};
   if (field === "name") {
@@ -508,7 +542,7 @@ export async function updateDestination(id, field, value) {
 }
 
 export async function updateDeparture(tripId, field, value) {
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   let data;
   if (field === "city") {
     const city = String(value || "").trim();
@@ -529,7 +563,7 @@ export async function updateDeparture(tripId, field, value) {
 }
 
 export async function updateArrival(tripId, value) {
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   const city = String(value || "").trim();
   const coords = city ? await geocodeStop(city) : null;
   await db.trip.update({
@@ -543,7 +577,7 @@ export async function updateArrival(tripId, value) {
 // field: "from" (where the journey home leaves — a city or airport),
 // "to" (where it lands) or "date".
 export async function updateReturn(tripId, field, value) {
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   let data;
   if (field === "from" || field === "to") {
     const city = String(value || "").trim();
@@ -566,7 +600,7 @@ export async function updateReturn(tripId, field, value) {
 
 export async function addLayover(tripId, leg = "DEPARTURE") {
   if (leg !== "DEPARTURE" && leg !== "RETURN") throw new Error("BAD_LEG");
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   const last = await db.layover.findFirst({ where: { tripId, leg }, orderBy: { position: "desc" } });
   await db.layover.create({ data: { tripId, leg, name: "", position: (last?.position ?? -1) + 1 } });
   revalidatePath("/trips/" + tripId);
@@ -575,7 +609,7 @@ export async function addLayover(tripId, leg = "DEPARTURE") {
 export async function updateLayover(id, value) {
   const layover = await db.layover.findUnique({ where: { id } });
   if (!layover) throw new Error("NOT_FOUND");
-  await assertOwner(layover.tripId);
+  await assertCan(layover.tripId, "edit");
   const name = String(value || "").trim();
   const coords = name ? await geocodeStop(name) : null;
   await db.layover.update({ where: { id }, data: { name, lat: coords?.lat ?? null, lng: coords?.lng ?? null } });
@@ -586,7 +620,7 @@ export async function updateLayover(id, value) {
 export async function deleteLayover(id) {
   const layover = await db.layover.findUnique({ where: { id } });
   if (!layover) return;
-  await assertOwner(layover.tripId);
+  await assertCan(layover.tripId, "edit");
   await db.layover.delete({ where: { id } });
   revalidatePath("/trips/" + layover.tripId);
   revalidatePath("/trips");
@@ -601,7 +635,7 @@ async function removeDestinationAndBlankPages(dest) {
     db.destination.findMany({ where: { tripId: dest.tripId }, orderBy: { position: "asc" } }),
     db.page.findMany({
       where: { tripId: dest.tripId, kind: "DAY" },
-      include: { _count: { select: { photos: true } } }
+      include: { _count: { select: { photos: true, comments: true } } }
     })
   ]);
   const { groups } = groupPagesByDestination(destinations, dayPages);
@@ -612,7 +646,7 @@ async function removeDestinationAndBlankPages(dest) {
   })).map((a) => a.parentId));
   const blank = mine.filter((p) =>
     !p.title && !p.notes && !p.weather && !p.spend && !p.steps && !p.tags &&
-    p._count.photos === 0 && !withActivities.has(p.id));
+    p._count.photos === 0 && p._count.comments === 0 && !withActivities.has(p.id));
 
   await db.$transaction([
     db.page.deleteMany({ where: { id: { in: blank.map((p) => p.id) } } }),
@@ -624,7 +658,7 @@ async function removeDestinationAndBlankPages(dest) {
 export async function deleteDestination(id) {
   const dest = await db.destination.findUnique({ where: { id } });
   if (!dest) return;
-  await assertOwner(dest.tripId);
+  await assertCan(dest.tripId, "delete");
   const result = await removeDestinationAndBlankPages(dest);
   revalidatePath("/trips/" + dest.tripId);
   revalidatePath("/trips");
@@ -636,7 +670,7 @@ export async function deleteDestination(id) {
 export async function makeDeparture(id) {
   const dest = await db.destination.findUnique({ where: { id } });
   if (!dest) return;
-  await assertOwner(dest.tripId);
+  await assertCan(dest.tripId, "delete");
   await db.trip.update({
     where: { id: dest.tripId },
     data: { departureCity: dest.name, departureDate: dest.arrive, departureLat: dest.lat, departureLng: dest.lng }
@@ -665,7 +699,7 @@ export async function makeDeparture(id) {
 // or the day after its last page once every day is taken. Without one, it's
 // the day after whatever is currently last in the whole trip.
 export async function addDayPage(tripId, destinationId) {
-  const trip = await assertOwner(tripId);
+  const { trip } = await assertCan(tripId, "edit");
   const [dayPages, destinations] = await Promise.all([
     db.page.findMany({ where: { tripId, kind: "DAY" }, orderBy: { date: "asc" } }),
     db.destination.findMany({ where: { tripId }, orderBy: { position: "asc" } })
@@ -711,7 +745,7 @@ export async function addDayPage(tripId, destinationId) {
 }
 
 export async function addActivityPage(tripId, parentId) {
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   const parent = await db.page.findUnique({ where: { id: parentId } });
   if (!parent || parent.tripId !== tripId || parent.kind !== "DAY") throw new Error("NOT_FOUND");
   const count = await db.page.count({ where: { parentId } });
@@ -731,7 +765,7 @@ const PAGE_FIELDS = ["title", "notes", "place", "weather", "spend", "steps", "ta
 export async function updatePage(id, field, value) {
   const page = await db.page.findUnique({ where: { id } });
   if (!page) throw new Error("NOT_FOUND");
-  await assertOwner(page.tripId);
+  await assertCan(page.tripId, "edit");
 
   const data = {};
   if (PAGE_FIELDS.includes(field)) data[field] = String(value);
@@ -749,9 +783,15 @@ export async function updatePage(id, field, value) {
 export async function deletePage(id) {
   const page = await db.page.findUnique({ where: { id } });
   if (!page) return;
-  await assertOwner(page.tripId);
-  await db.page.deleteMany({ where: { parentId: id } });
-  await db.page.delete({ where: { id } });
+  await assertCan(page.tripId, "delete");
+  // The page and its activity pages, children first (see deleteTripsTx).
+  const pages = { OR: [{ id }, { parentId: id }] };
+  await db.$transaction([
+    db.comment.deleteMany({ where: { page: pages } }),
+    db.photo.deleteMany({ where: { page: pages } }),
+    db.page.deleteMany({ where: { parentId: id } }),
+    db.page.delete({ where: { id } })
+  ]);
   revalidatePath("/trips/" + page.tripId);
   redirect("/trips/" + page.tripId);
 }
@@ -762,7 +802,7 @@ export async function uploadPhotos(_prev, form) {
   const pageId = String(form.get("pageId") || "");
   const page = await db.page.findUnique({ where: { id: pageId } });
   if (!page) return { error: "That page no longer exists." };
-  await assertOwner(page.tripId);
+  const { user } = await assertCan(page.tripId, "upload");
 
   const files = form.getAll("photos").filter((f) => f && typeof f.arrayBuffer === "function" && f.size > 0);
   if (!files.length) return { error: "Choose at least one photo." };
@@ -771,7 +811,7 @@ export async function uploadPhotos(_prev, form) {
   for (const file of files) {
     if (!String(file.type || "").startsWith("image/")) continue;
     const url = await saveUpload(file);
-    await db.photo.create({ data: { pageId, url, position: position++ } });
+    await db.photo.create({ data: { pageId, url, position: position++, uploadedById: user.id } });
   }
   const trip = await db.trip.findUnique({ where: { id: page.tripId } });
   if (trip && !trip.coverUrl) {
@@ -784,7 +824,7 @@ export async function uploadPhotos(_prev, form) {
 
 export async function setTripCover(_prev, form) {
   const tripId = String(form.get("tripId") || "");
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   const file = form.get("cover");
   if (!file || typeof file.arrayBuffer !== "function" || !file.size) return { error: "Choose an image." };
   if (!String(file.type || "").startsWith("image/")) return { error: "That file isn't an image." };
@@ -798,7 +838,7 @@ export async function setTripCover(_prev, form) {
 
 // How the cover sits in its frame — see coverFrame() in lib/format.js.
 export async function setCoverFrame(tripId, frame) {
-  await assertOwner(tripId);
+  await assertCan(tripId, "edit");
   const num = (v, lo, hi, fallback) => {
     const n = Number(v);
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
@@ -821,7 +861,7 @@ export async function setCoverFrame(tripId, frame) {
 export async function updatePhoto(id, field, value) {
   const photo = await db.photo.findUnique({ where: { id }, include: { page: true } });
   if (!photo) throw new Error("NOT_FOUND");
-  await assertOwner(photo.page.tripId);
+  await assertPhotoAccess(photo);
   let data;
   if (field === "caption") {
     data = { caption: String(value ?? "").trim().slice(0, 2000) };
@@ -841,7 +881,7 @@ export async function updatePhoto(id, field, value) {
 export async function reorderPhotos(pageId, ids) {
   const page = await db.page.findUnique({ where: { id: String(pageId || "") } });
   if (!page) throw new Error("NOT_FOUND");
-  await assertOwner(page.tripId);
+  await assertCan(page.tripId, "edit");
   const current = await db.photo.findMany({ where: { pageId: page.id }, select: { id: true } });
   const wanted = Array.isArray(ids) ? ids.map(String) : [];
   const known = new Set(current.map((p) => p.id));
@@ -854,10 +894,37 @@ export async function reorderPhotos(pageId, ids) {
   return { ok: true };
 }
 
+/* ── comments ─────────────────────────────────────────────────────── */
+
+// Anyone on the trip, at any level, can comment on its pages.
+export async function addComment(pageId, body) {
+  const page = await db.page.findUnique({ where: { id: String(pageId || "") } });
+  if (!page) throw new Error("NOT_FOUND");
+  const { user } = await assertCan(page.tripId, "comment");
+  const text = String(body || "").trim().slice(0, 4000);
+  if (!text) return { error: "Write something first." };
+  await db.comment.create({ data: { pageId: page.id, userId: user.id, body: text } });
+  revalidatePath("/trips/" + page.tripId);
+  revalidatePath("/trips/" + page.tripId + "/pages/" + page.id);
+  return { ok: true };
+}
+
+// Your own comments, or anyone's with Full access / as the owner.
+export async function deleteComment(id) {
+  const comment = await db.comment.findUnique({ where: { id: String(id || "") }, include: { page: true } });
+  if (!comment) return { ok: true };
+  const { user, role } = await assertCan(comment.page.tripId, "comment");
+  if (comment.userId !== user.id && !can(role, "delete")) throw new Error("FORBIDDEN");
+  await db.comment.delete({ where: { id: comment.id } });
+  revalidatePath("/trips/" + comment.page.tripId);
+  revalidatePath("/trips/" + comment.page.tripId + "/pages/" + comment.pageId);
+  return { ok: true };
+}
+
 export async function deletePhoto(id) {
   const photo = await db.photo.findUnique({ where: { id }, include: { page: true } });
   if (!photo) return;
-  await assertOwner(photo.page.tripId);
+  await assertPhotoAccess(photo);
   await db.photo.delete({ where: { id } });
   revalidatePath("/trips/" + photo.page.tripId);
 }
@@ -885,6 +952,8 @@ export async function adminDeleteUser(userId) {
   if (userId === me.id) return { error: "You can't delete your own account here." };
   await db.$transaction([
     ...deleteTripsTx({ userId }),
+    db.comment.deleteMany({ where: { userId } }),
+    db.photo.updateMany({ where: { uploadedById: userId }, data: { uploadedById: null } }),
     db.tripBuddy.deleteMany({ where: { userId } }),
     db.buddy.deleteMany({ where: { OR: [{ requesterId: userId }, { addresseeId: userId }] } }),
     db.user.delete({ where: { id: userId } })

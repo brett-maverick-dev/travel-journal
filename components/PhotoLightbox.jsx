@@ -46,7 +46,7 @@ function FittedPhoto({ photo }) {
 // The enlarged view of one of a page's photos, with its description and
 // previous/next. Rendered into <body>: the page carousel animates with a
 // transform, which would otherwise trap position:fixed inside it.
-export default function PhotoLightbox({ photos, index, onIndex, onClose, onRotate }) {
+export default function PhotoLightbox({ photos, index, onIndex, onClose, onRotate, canRotate = () => Boolean(onRotate) }) {
   const photo = photos[index];
   const go = (step) => onIndex((index + step + photos.length) % photos.length);
 
@@ -113,7 +113,7 @@ export default function PhotoLightbox({ photos, index, onIndex, onClose, onRotat
             {photo.caption || <span style={{ opacity: 0.55 }}>No description</span>}
           </span>
           {photos.length > 1 && <span style={{ opacity: 0.55, fontSize: 12, whiteSpace: "nowrap" }}>{index + 1} / {photos.length}</span>}
-          {onRotate && (
+          {onRotate && canRotate(photo) && (
             <span style={{ display: "inline-flex", gap: 4 }}>
               <button type="button" className="btn btn-icon" style={control} aria-label="Rotate left"
                 title="Rotate left" onClick={() => onRotate(photo, -90)}><i className="ph ph-arrow-counter-clockwise" /></button>

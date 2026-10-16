@@ -39,6 +39,8 @@ model User {
   buddiesSent       Buddy[]     @relation("BuddyRequester")
   buddiesRecv       Buddy[]     @relation("BuddyAddressee")
   tripsSharedWithMe TripBuddy[]
+  comments          Comment[]
+  photosUploaded    Photo[]
 }
 
 // A friend request / connection between two users — "Travel Buddies".
@@ -105,16 +107,18 @@ model Trip {
   @@index([userId])
 }
 
-// A travel buddy the trip owner has added as a full collaborator on this
-// trip — can view and edit it like the owner, regardless of the trip's
-// own visibility. Only actual travel buddies (an ACCEPTED Buddy row with
-// the owner) can be added — see addTripBuddy() in app/actions.js.
+// A travel buddy added to this trip, at an access level (lib/permissions.js):
+// FULL (everything but deleting the trip), EDITOR (add and change, no
+// deleting, no public/private, no people), CONTRIBUTOR (add photos and
+// comment) or VIEWER (read and comment — useful for private trips). Only
+// actual travel buddies of whoever adds them can be added.
 model TripBuddy {
   id      String   @id @default(cuid())
   tripId  String
   trip    Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   userId  String
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role    String   @default("EDITOR") @db.VarChar(16)
   addedAt DateTime @default(now())
 
   @@unique([tripId, userId])
@@ -175,6 +179,7 @@ model Page {
   hidden   Boolean  @default(false)
   position Int      @default(0)
   photos   Photo[]
+  comments Comment[]
 
   @@index([tripId])
   @@index([parentId])
@@ -190,6 +195,24 @@ model Photo {
   // Clockwise turn to display it upright: 0, 90, 180 or 270. Applied when
   // shown (components/PhotoImage.jsx); the file itself is never re-encoded.
   rotation Int    @default(0)
+  // Who added it — Contributors may only change their own photos. Null for
+  // photos from before this was recorded; those count as the trip owner's.
+  uploadedById String?
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([pageId])
+}
+
+// A comment on a page, by anyone on the trip (any access level).
+model Comment {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String   @db.Text // TEXT: no DB default; always provided
+  createdAt DateTime @default(now())
+
+  @@index([pageId])
+  @@index([userId])
 }

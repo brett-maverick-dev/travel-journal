@@ -11,10 +11,13 @@ import AddButton from "./AddButton";
 import DeleteTripButton from "./DeleteTripButton";
 import DeletePageButton from "@/components/DeletePageButton";
 import TripBuddies from "./TripBuddies";
+import Comments from "@/components/Comments";
+import { readOnlyJournal } from "@/components/readOnlyJournal";
 import DestinationActions from "./DestinationActions";
 import RemoveLayoverButton from "./RemoveLayoverButton";
 import TripJournal from "@/components/TripJournal";
 import { currentUser } from "@/lib/session";
+import { tripRole, abilities, normalizeRole } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
 import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture, updateArrival, addLayover, updateLayover, updateReturn } from "@/app/actions";
@@ -33,15 +36,22 @@ export default async function TripPage({ params, searchParams }) {
       user: true,
       destinations: { orderBy: { position: "asc" } },
       layovers: { orderBy: { position: "asc" } },
-      pages: { orderBy: [{ position: "asc" }, { date: "asc" }], include: { photos: { orderBy: { position: "asc" } } } },
+      pages: {
+        orderBy: [{ position: "asc" }, { date: "asc" }],
+        include: {
+          photos: { orderBy: { position: "asc" } },
+          comments: { orderBy: { createdAt: "asc" }, include: { user: { select: { name: true, handle: true, avatarUrl: true } } } }
+        }
+      },
       buddies: { include: { user: true }, orderBy: { addedAt: "asc" } }
     }
   });
-  const isOwner = trip?.userId === user.id;
-  const isCollaborator = isOwner || trip?.buddies.some((b) => b.userId === user.id);
-  if (!trip || !isCollaborator) notFound();
+  const role = await tripRole(trip, user.id);
+  if (!trip || !role) notFound();
+  const may = abilities(role);
 
-  const availableBuddies = isOwner
+  // My own travel buddies who aren't on the trip yet — who I could add.
+  const availableBuddies = may.managePeople
     ? await db.buddy.findMany({
         where: {
           status: "ACCEPTED",
@@ -50,8 +60,15 @@ export default async function TripPage({ params, searchParams }) {
         include: { requester: true, addressee: true }
       }).then((rows) => rows
         .map((r) => (r.requesterId === user.id ? r.addressee : r.requester))
-        .filter((u) => !trip.buddies.some((b) => b.userId === u.id)))
+        .filter((u) => u.id !== trip.userId && !trip.buddies.some((b) => b.userId === u.id)))
     : [];
+
+  // What sits under each page for this person: the photo grid (with what
+  // their level allows) and the comment thread.
+  const photosFor = (p) => (
+    <Photos pageId={p.id} photos={p.photos} canUpload={may.upload} canEditAll={may.edit} meId={user.id} ownerId={trip.userId} />
+  );
+  const commentsFor = (p) => <Comments pageId={p.id} comments={p.comments} meId={user.id} canModerate={may.delete} />;
 
   const days = trip.pages.filter((p) => p.kind === "DAY");
   const activitiesFor = (dayId) => trip.pages.filter((p) => p.kind === "ACTIVITY" && p.parentId === dayId);
@@ -159,7 +176,7 @@ export default async function TripPage({ params, searchParams }) {
               save={updateDestination.bind(null, d.id, "transport")}
               style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1 }} />
             <span style={{ fontSize: 11, color: "var(--color-accent-300)", whiteSpace: "nowrap" }}>{nights(d.arrive, d.depart)}</span>
-            <DestinationActions destinationId={d.id} name={d.name} canMakeDeparture={i === 0 && !trip.departureCity} />
+            {may.delete && <DestinationActions destinationId={d.id} name={d.name} canMakeDeparture={i === 0 && !trip.departureCity} />}
           </div>
           {d.lat == null && (
             <span className="text-muted" style={{ fontSize: 10 }}>Not found on the map — try a fuller place name.</span>
@@ -239,8 +256,8 @@ export default async function TripPage({ params, searchParams }) {
           <div className="text-muted" style={{ fontSize: 11 }}>
             {[p.weather, p.spend, p.steps].filter(Boolean).join("  ·  ")}
           </div>
-          <DeletePageButton pageId={p.id} confirmLabel={p.title ? '"' + p.title + '"' : "this page"} compact
-            style={{ marginLeft: "auto" }} />
+          {may.delete && <DeletePageButton pageId={p.id} confirmLabel={p.title ? '"' + p.title + '"' : "this page"} compact
+            style={{ marginLeft: "auto" }} />}
         </div>
         <Field value={p.title} placeholder="Give this day a title" save={updatePage.bind(null, p.id, "title")}
           style={{ border: 0, background: "transparent", padding: 0, fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 31, minHeight: "auto", letterSpacing: "-0.015em", margin: "6px 0 14px" }} />
@@ -249,7 +266,7 @@ export default async function TripPage({ params, searchParams }) {
           style={{ minHeight: 200, fontSize: 15, lineHeight: 1.65, padding: "14px 16px" }} />
 
         <div style={{ marginTop: 14 }}>
-          <Photos pageId={p.id} photos={p.photos} canEdit />
+          {photosFor(p)}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 14 }}>
@@ -279,9 +296,16 @@ export default async function TripPage({ params, searchParams }) {
             label="Break an activity out onto its own page"
             style={{ border: 0, padding: "12px 14px", fontSize: 13, justifyContent: "flex-start" }} />
         </div>
+        <div style={{ marginTop: 28 }}>{commentsFor(p)}</div>
       </div>
     )
   }]));
+
+  // Viewers and Contributors read the journal rather than edit it: the
+  // public layout, but with hidden pages, their photo uploads and comments.
+  const journal = may.edit
+    ? { destinations: journalDestinations, groups: journalGroups, pages: journalPages, initialDestId, initialPageId }
+    : readOnlyJournal(trip, { wantDest, wantPage, photosFor: (p) => (may.upload || p.photos.length ? photosFor(p) : null), commentsFor });
   const mapTrips = [{
     id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl, coverFrame: coverFrame(trip),
     dateRange: fmtRange(trip.startDate, trip.endDate), href: "/trips/" + trip.id,
@@ -294,15 +318,15 @@ export default async function TripPage({ params, searchParams }) {
 
       <div style={{ position: "relative", height: 340, overflow: "hidden", background: "var(--color-neutral-900)" }}>
         {trip.coverUrl
-          ? <CoverImage tripId={trip.id} url={trip.coverUrl} frame={coverFrame(trip)} canEdit />
+          ? <CoverImage tripId={trip.id} url={trip.coverUrl} frame={coverFrame(trip)} canEdit={may.edit} />
           : <div style={{ position: "absolute", inset: 0 }} />}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, var(--color-bg) 2%, color-mix(in srgb, var(--color-bg) 55%, transparent) 45%, transparent)" }} />
         <div style={{ position: "absolute", left: 34, top: 22, display: "flex", gap: 8 }}>
           <Link href="/trips" className="btn btn-secondary" style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }}>
             <i className="ph ph-arrow-left" />All trips
           </Link>
-          <CoverUpload tripId={trip.id} hasCover={Boolean(trip.coverUrl)} />
-          {isOwner && (
+          {may.edit && <CoverUpload tripId={trip.id} hasCover={Boolean(trip.coverUrl)} />}
+          {may.deleteTrip && (
             <DeleteTripButton tripId={trip.id} tripName={trip.name}
               style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }} />
           )}
@@ -310,34 +334,41 @@ export default async function TripPage({ params, searchParams }) {
         <div style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", gap: 26, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 420px", minWidth: 0 }}>
             <div className="card-kicker">{trip.country || trip.destinations[0]?.name}</div>
-            <Field value={trip.name} save={renameTrip.bind(null, trip.id)}
-              style={{ border: 0, background: "transparent", padding: 0, margin: "4px 0 6px", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 46, minHeight: "auto", letterSpacing: "-0.015em", width: "100%" }} />
+            {may.edit ? (
+              <Field value={trip.name} save={renameTrip.bind(null, trip.id)}
+                style={{ border: 0, background: "transparent", padding: 0, margin: "4px 0 6px", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 46, minHeight: "auto", letterSpacing: "-0.015em", width: "100%" }} />
+            ) : (
+              <h1 style={{ margin: "4px 0 6px", fontSize: 46, letterSpacing: "-0.015em" }}>{trip.name}</h1>
+            )}
             <div className="text-muted" style={{ fontSize: 14 }}>
               {fmtRange(trip.startDate, trip.endDate)} · {trip.destinations.length} destinations · {trip.pages.length} pages
             </div>
           </div>
-          <VisibilityToggle tripId={trip.id} visibility={trip.visibility} shareUrl={"/u/" + trip.user.handle + "/" + trip.id} />
+          {may.visibility ? (
+            <VisibilityToggle tripId={trip.id} visibility={trip.visibility} shareUrl={"/u/" + trip.user.handle + "/" + trip.id} />
+          ) : (
+            <span className="tag tag-neutral" title="Only the owner and people with Full access can change this">
+              <i className={"ph " + (trip.visibility === "PUBLIC" ? "ph-globe-hemisphere-west" : "ph-lock-simple")} style={{ marginRight: 5 }} />
+              {trip.visibility === "PUBLIC" ? "Public" : "Private"}
+            </span>
+          )}
         </div>
       </div>
 
       <div style={{ maxWidth: 1420, margin: "0 auto", padding: "18px 34px 0" }}>
-        <TripBuddies tripId={trip.id} isOwner={isOwner}
-          companions={trip.buddies.map((b) => b.user)} available={availableBuddies} />
+        <TripBuddies tripId={trip.id} myRole={role} meId={user.id} owner={trip.user}
+          members={trip.buddies.map((b) => ({ user: b.user, role: normalizeRole(b.role) }))} available={availableBuddies} />
       </div>
 
       <TripJournal
         map={<TripMap trips={mapTrips} height={186} only />}
-        destinations={journalDestinations}
-        groups={journalGroups}
-        pages={journalPages}
-        initialDestId={initialDestId}
-        initialPageId={initialPageId}
-        addPage={addDayPage.bind(null, trip.id)}
-        emptyHint="No pages for this destination yet."
-        addDestination={
+        {...journal}
+        addPage={may.edit ? addDayPage.bind(null, trip.id) : undefined}
+        emptyHint={may.edit ? "No pages for this destination yet." : "Nothing written for this stop yet."}
+        addDestination={may.edit ? (
           <AddButton action={addDestination.bind(null, trip.id)} label="Add destination"
             style={{ marginLeft: 36, marginTop: 10, padding: "8px 12px", fontSize: 12, width: "calc(100% - 36px)" }} />
-        }
+        ) : null}
       />
     </>
   );

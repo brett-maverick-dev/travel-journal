@@ -424,3 +424,8 @@ a:hover { color: var(--color-accent-300); }
 .photo-dragging { position: relative; z-index: 2; }
 .photo-dragging .photo-tile { transform: scale(1.04); box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-lg); opacity: .92; }
 .photo-dragging .photo-grip { opacity: 1; cursor: grabbing; }
+
+/* the access level picker inside a "Traveling with" chip */
+.role-select { font: inherit; font-size: 10px; color: var(--color-neutral-300); background: transparent;
+  border: 1px solid var(--color-divider); border-radius: 4px; padding: 1px 2px; cursor: pointer; }
+.role-select option { background: var(--color-surface); color: var(--color-text); }

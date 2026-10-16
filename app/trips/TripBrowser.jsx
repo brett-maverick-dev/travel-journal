@@ -67,7 +67,7 @@ export default function TripBrowser({ trips }) {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <div className="card-kicker">{t.country}</div>
                 <span style={{ display: "flex", gap: 6 }}>
-                  {t.sharedBy && <span className="tag tag-outline">Shared by @{t.sharedBy}</span>}
+                  {t.sharedBy && <span className="tag tag-outline" title={"Shared by @" + t.sharedBy}>@{t.sharedBy} · {t.myRole}</span>}
                   <span className={t.visibility === "PUBLIC" ? "tag tag-accent" : "tag tag-neutral"}>
                     {t.visibility === "PUBLIC" ? "Public" : "Private"}
                   </span>
