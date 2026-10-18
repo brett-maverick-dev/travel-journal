@@ -7,7 +7,7 @@
 //   5. start Next.js on the port the platform assigns
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import nextEnv from "@next/env";
@@ -182,6 +182,29 @@ async function backupTick() {
   } catch (err) {
     console.warn("[trekkster] database snapshot failed: " + err.message);
   }
+}
+
+// Photos: in the S3-compatible bucket when configured (deploys can wipe the
+// app's own disk), else local disk. Any photo still on disk is copied up on
+// boot — in the background, so a slow bucket can't hold up the start.
+const store = await import("./lib/object-store.js");
+const UPLOADS = process.env.UPLOAD_DIR || "public/assets/uploads";
+if (store.storeConfigured()) {
+  console.log("[trekkster] photos: bucket " + process.env.S3_BUCKET + " at " + new URL(process.env.S3_ENDPOINT).host +
+    (process.env.S3_PUBLIC_URL ? " (served from " + process.env.S3_PUBLIC_URL + ")" : ""));
+  (async () => {
+    let copied = 0;
+    for (const name of readdirSync(UPLOADS).filter((f) => !f.startsWith("."))) {
+      if (await store.objectExists(name)) continue;
+      const type = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", avif: "image/avif", heic: "image/heic" }[name.split(".").pop().toLowerCase()];
+      await store.putObject(name, readFileSync(UPLOADS + "/" + name), type);
+      copied++;
+    }
+    if (copied) console.log("[trekkster] photos: copied " + copied + " from local disk to the bucket");
+  })().catch((err) => console.warn("[trekkster] photos: copying local files to the bucket failed: " + err.message));
+} else {
+  console.warn("[trekkster] photos: no S3_* settings — storing them on local disk" +
+    (process.env.NODE_ENV === "production" ? ", which deploys can wipe. Set up the photo bucket (see README)." : ""));
 }
 
 // One on boot (a free pre-deploy safety net), then daily while the process

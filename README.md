@@ -77,6 +77,8 @@ The package already meets the platform requirements: `package.json` has a non-em
    | `DATABASE_URL` | Not needed — the managed MySQL's `DB_*` variables are used. Delete any old `file:` value |
    | `SEED_ON_BOOT` | `1` on the very first boot only, to load the six demo trips |
    | `SMTP_URL` | Optional. Blank means codes print to the runtime log |
+   | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | The photo bucket — required in production, or photos are lost on the next deploy. Cloudflare R2: endpoint `https://<account-id>.r2.cloudflarestorage.com`, region `auto` |
+   | `S3_PUBLIC_URL` | Optional. The bucket's public address, to serve photos straight from it |
    | `RESTORE_BACKUP` | Optional. A snapshot file name from `/admin/backups` to load into an empty database |
 
 5. **Import & Deploy**, then open the preview URL.
@@ -93,9 +95,12 @@ Three platform details the app is built around:
   provides with every published app (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
   `DB_PASSWORD`). It isn't part of the deploy, so redeploying never touches the data.
   The boot log prints which host/database it connected to, and the MySQL version.
-- **Persistence for files.** Only `/public/assets/` survives a redeploy, so uploaded
-  photos (`public/assets/uploads`) and backup snapshots (`public/assets/data/backups`)
-  live there. Because that's under `public/`, `server.mjs` (and `middleware.js`) refuse
+- **Photos.** Uploaded photos go to an S3-compatible bucket (Cloudflare R2), set up with
+  the `S3_*` secrets in `.env.example` — the app's own disk was being wiped by deploys,
+  taking photos with it. Without those settings (local development) they're written to
+  `public/assets/uploads`. Either way they're linked as `/api/photo?f=<name>`; the boot
+  log says which is in use, and copies any photo still on local disk up to the bucket.
+- **Backups on disk.** Backup snapshots are written to `public/assets/data/backups`. Because that's under `public/`, `server.mjs` (and `middleware.js`) refuse
   every request for `/assets/data/*`, so backups are never served as static files.
 - **No deploy shell.** `server.mjs` applies the database schema itself on boot, via
   `prisma migrate deploy`. See "Changing the schema" below for how to add a migration.
