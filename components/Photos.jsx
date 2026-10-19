@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { uploadPhotos, deletePhoto, updatePhoto, reorderPhotos } from "@/app/actions";
-import { compressInputFiles } from "@/lib/compress-image";
+import { compressImage } from "@/lib/compress-image";
 import Field from "./Field";
 import PhotoImage from "./PhotoImage";
 import PhotoLightbox from "./PhotoLightbox";
@@ -22,8 +22,11 @@ import PhotoLightbox from "./PhotoLightbox";
 export default function Photos({ pageId, photos, canUpload = false, canEditAll = false, meId, ownerId }) {
   const canEdit = canEditAll; // reordering and the drag handle
   const mine = (p) => canEditAll || (canUpload && (p.uploadedById ?? ownerId) === meId);
-  const [state, action, pending] = useActionState(uploadPhotos, null);
-  const [shrinking, setShrinking] = useState(false);
+  // Uploading several photos: one at a time, each its own request, so the
+  // number picked is never limited by the per-request size cap — and one
+  // photo failing doesn't stop the rest.
+  const [progress, setProgress] = useState(null); // { done, total, step: "Optimising" | "Uploading" }
+  const [failures, setFailures] = useState([]);    // [{ name, reason }]
   const [open, setOpen] = useState(null); // index of the enlarged photo
   const [turns, setTurns] = useState({}); // id → rotation, shown before the save lands
   const [order, setOrder] = useState(null); // ids in a not-yet-saved order, or null
@@ -142,9 +145,28 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
 
   const onPick = async (e) => {
     const input = e.currentTarget;
-    setShrinking(true);
-    try { await compressInputFiles(input); } finally { setShrinking(false); }
-    input.form.requestSubmit();
+    const files = [...(input.files || [])];
+    input.value = ""; // so picking the same photos again still fires onChange
+    if (!files.length) return;
+    setFailures([]);
+    const failed = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setProgress({ done: i, total: files.length, step: "Optimising" });
+      try {
+        const small = await compressImage(file);
+        setProgress({ done: i, total: files.length, step: "Uploading" });
+        const fd = new FormData();
+        fd.append("pageId", pageId);
+        fd.append("photos", small);
+        const res = await uploadPhotos(null, fd);
+        if (res?.error) failed.push({ name: file.name, reason: res.error });
+      } catch {
+        failed.push({ name: file.name, reason: "The upload didn't go through — check your connection and try again." });
+      }
+    }
+    setProgress(null);
+    setFailures(failed);
   };
 
   const rotate = (photo, delta) => {
@@ -194,20 +216,28 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
           </figure>
         ))}
         {canUpload && (
-          <form action={action} style={{ aspectRatio: "4 / 3" }}>
-            <input type="hidden" name="pageId" value={pageId} />
+          <form onSubmit={(e) => e.preventDefault()} style={{ aspectRatio: "4 / 3" }}>
             <label className="dashed" style={{
               display: "grid", placeItems: "center", width: "100%", height: "100%",
               gap: 6, fontSize: 12, textAlign: "center", padding: 10
             }}>
               <i className="ph ph-image-square" style={{ fontSize: 20 }} />
-              {shrinking ? "Optimising…" : pending ? "Uploading…" : "Add photos"}
-              <input hidden type="file" name="photos" accept="image/*" multiple onChange={onPick} />
+              {progress
+                ? progress.step + (progress.total > 1 ? " " + (progress.done + 1) + " of " + progress.total : "") + "…"
+                : "Add photos"}
+              <input hidden type="file" name="photos" accept="image/*" multiple disabled={Boolean(progress)} onChange={onPick} />
             </label>
           </form>
         )}
       </div>
-      {state?.error && <p className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>{state.error}</p>}
+      {failures.length > 0 && (
+        <div role="alert" style={{ fontSize: 12, marginTop: 8, color: "var(--color-accent-300)" }}>
+          {failures.length === 1 ? "1 photo wasn't added:" : failures.length + " photos weren't added:"}
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {failures.map((f, i) => <li key={i}><strong>{f.name}</strong> — {f.reason}</li>)}
+          </ul>
+        </div>
+      )}
       {reorderError && <p className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>{reorderError}</p>}
 
       {open != null && shown[open] && (

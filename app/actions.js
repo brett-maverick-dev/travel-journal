@@ -807,12 +807,24 @@ export async function uploadPhotos(_prev, form) {
   const files = form.getAll("photos").filter((f) => f && typeof f.arrayBuffer === "function" && f.size > 0);
   if (!files.length) return { error: "Choose at least one photo." };
 
+  // The grid sends one photo per call (see components/Photos.jsx), so a
+  // failure here is that photo's alone — report it rather than throw, which
+  // production would turn into a generic error.
   let position = await db.photo.count({ where: { pageId } });
+  let saved = 0;
   for (const file of files) {
     if (!String(file.type || "").startsWith("image/")) continue;
-    const url = await saveUpload(file);
+    let url;
+    try {
+      url = await saveUpload(file);
+    } catch (err) {
+      console.error("[trekkster] photo upload failed: " + err.message);
+      return { error: /larger than/.test(err.message) ? err.message : "It couldn't be saved — try again." };
+    }
     await db.photo.create({ data: { pageId, url, position: position++, uploadedById: user.id } });
+    saved++;
   }
+  if (!saved) return { error: "That file isn't a photo." };
   const trip = await db.trip.findUnique({ where: { id: page.tripId } });
   if (trip && !trip.coverUrl) {
     const first = await db.photo.findFirst({ where: { pageId }, orderBy: { position: "asc" } });
