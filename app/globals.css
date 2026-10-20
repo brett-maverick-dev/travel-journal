@@ -429,3 +429,13 @@ a:hover { color: var(--color-accent-300); }
 .role-select { font: inherit; font-size: 10px; color: var(--color-neutral-300); background: transparent;
   border: 1px solid var(--color-divider); border-radius: 4px; padding: 1px 2px; cursor: pointer; }
 .role-select option { background: var(--color-surface); color: var(--color-text); }
+
+/* dropping photos onto a page's photo area */
+.photo-drop { position: relative; border-radius: 10px; }
+.photo-drop-active { outline: 2px dashed var(--color-accent); outline-offset: 6px; }
+.photo-drop-hint { position: absolute; inset: -6px; z-index: 3; display: flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 12px; pointer-events: none; font-size: 14px; font-weight: 600; color: var(--color-text);
+  background: color-mix(in srgb, var(--color-accent) 16%, color-mix(in srgb, var(--color-bg) 70%, transparent)); }
+.photo-drop-hint i { font-size: 20px; color: var(--color-accent); }
+.photo-drop-tip { display: block; font-size: 11px; margin-top: 2px; }
+@media (hover: none) { .photo-drop-tip { display: none; } } /* touch screens can't drag files in */

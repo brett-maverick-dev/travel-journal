@@ -143,13 +143,13 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
     requestAnimationFrame(() => document.querySelector("[data-photo-id='" + id + "'] .photo-grip")?.focus());
   };
 
-  const onPick = async (e) => {
-    const input = e.currentTarget;
-    const files = [...(input.files || [])];
-    input.value = ""; // so picking the same photos again still fires onChange
-    if (!files.length) return;
+  // Uploads the given files one by one — from the picker or a drop.
+  // `skipped` are dropped files that weren't images, reported alongside.
+  const uploadFiles = async (files, skipped = []) => {
+    if (progress) return; // one batch at a time
     setFailures([]);
-    const failed = [];
+    const failed = skipped.map((f) => ({ name: f.name, reason: "That file isn't a photo." }));
+    if (!files.length) { setFailures(failed); return; }
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       setProgress({ done: i, total: files.length, step: "Optimising" });
@@ -169,6 +169,44 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
     setFailures(failed);
   };
 
+  const onPick = (e) => {
+    const input = e.currentTarget;
+    const files = [...(input.files || [])];
+    input.value = ""; // so picking the same photos again still fires onChange
+    if (files.length) uploadFiles(files);
+  };
+
+  // Drag and drop: the whole photo area takes files dragged in from the
+  // desktop. Only file drags count — the reorder grips use pointer events, not
+  // HTML drag and drop, so they never trigger this. The depth counter stops
+  // the highlight flickering as the drag crosses child elements.
+  const [dropping, setDropping] = useState(false);
+  const dragDepth = useRef(0);
+  const carriesFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  const dropProps = !canUpload ? {} : {
+    onDragEnter: (e) => { if (!carriesFiles(e)) return; e.preventDefault(); dragDepth.current++; setDropping(true); },
+    onDragOver: (e) => { if (!carriesFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = progress ? "none" : "copy"; },
+    onDragLeave: (e) => { if (!carriesFiles(e)) return; if (--dragDepth.current <= 0) { dragDepth.current = 0; setDropping(false); } },
+    onDrop: (e) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      dragDepth.current = 0;
+      setDropping(false);
+      const all = [...e.dataTransfer.files];
+      uploadFiles(all.filter((f) => f.type.startsWith("image/")), all.filter((f) => !f.type.startsWith("image/")));
+    }
+  };
+
+  // A file dropped anywhere else on the page would make the browser leave
+  // it to open the file — swallow those while there's somewhere to add photos.
+  useEffect(() => {
+    if (!canUpload) return;
+    const stop = (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => { window.removeEventListener("dragover", stop); window.removeEventListener("drop", stop); };
+  }, [canUpload]);
+
   const rotate = (photo, delta) => {
     const next = (((Number(photo.rotation) || 0) + delta) % 360 + 360) % 360;
     setTurns((t) => ({ ...t, [photo.id]: next }));
@@ -176,7 +214,12 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
   };
 
   return (
-    <div>
+    <div className={"photo-drop" + (dropping ? " photo-drop-active" : "")} {...dropProps}>
+      {dropping && (
+        <div className="photo-drop-hint" aria-hidden="true">
+          <i className="ph ph-upload-simple" />Drop photos to add them
+        </div>
+      )}
       <div ref={grid} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, alignItems: "start" }}>
         {shown.map((p, i) => (
           <figure key={p.id} data-photo-id={p.id} className={dragId === p.id ? "photo-dragging" : undefined}
@@ -224,7 +267,7 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
               <i className="ph ph-image-square" style={{ fontSize: 20 }} />
               {progress
                 ? progress.step + (progress.total > 1 ? " " + (progress.done + 1) + " of " + progress.total : "") + "…"
-                : "Add photos"}
+                : <>Add photos<span className="text-muted photo-drop-tip">or drop them here</span></>}
               <input hidden type="file" name="photos" accept="image/*" multiple disabled={Boolean(progress)} onChange={onPick} />
             </label>
           </form>
@@ -232,7 +275,7 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
       </div>
       {failures.length > 0 && (
         <div role="alert" style={{ fontSize: 12, marginTop: 8, color: "var(--color-accent-300)" }}>
-          {failures.length === 1 ? "1 photo wasn't added:" : failures.length + " photos weren't added:"}
+          {failures.length === 1 ? "1 file wasn't added:" : failures.length + " files weren't added:"}
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
             {failures.map((f, i) => <li key={i}><strong>{f.name}</strong> — {f.reason}</li>)}
           </ul>
