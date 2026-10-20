@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE `Photo` ADD COLUMN `duration` DOUBLE NULL,
+    ADD COLUMN `kind` VARCHAR(8) NOT NULL DEFAULT 'IMAGE',
+    ADD COLUMN `posterUrl` VARCHAR(1024) NULL;

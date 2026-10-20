@@ -439,3 +439,9 @@ a:hover { color: var(--color-accent-300); }
 .photo-drop-hint i { font-size: 20px; color: var(--color-accent); }
 .photo-drop-tip { display: block; font-size: 11px; margin-top: 2px; }
 @media (hover: none) { .photo-drop-tip { display: none; } } /* touch screens can't drag files in */
+
+/* a video in the photo grid: play mark and length */
+.video-badge { position: absolute; right: 6px; bottom: 6px; z-index: 1; display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1; color: #fff;
+  background: rgba(8, 9, 16, .72); pointer-events: none; }
+.video-badge i { font-size: 11px; }

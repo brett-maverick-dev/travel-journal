@@ -100,6 +100,24 @@ Three platform details the app is built around:
   taking photos with it. Without those settings (local development) they're written to
   `public/assets/uploads`. Either way they're linked as `/api/photo?f=<name>`; the boot
   log says which is in use, and copies any photo still on local disk up to the bucket.
+- **Videos.** Short clips (up to 60 seconds and 100 MB — `lib/media.js`) are too big to
+  pass through the app, so the browser uploads them straight to the bucket using a
+  15-minute pre-signed URL, then the app checks what arrived. That needs a CORS rule on
+  the bucket. In Cloudflare: R2 → the bucket → Settings → CORS Policy → Edit, and paste:
+
+  ```json
+  [
+    {
+      "AllowedOrigins": ["https://trekkster.app", "https://www.trekkster.app"],
+      "AllowedMethods": ["PUT", "GET", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+  ```
+
+  Add any other address the site is opened on (such as a preview URL) to
+  `AllowedOrigins`. Without the rule, photo uploads still work but video uploads fail.
 - **Backups on disk.** Backup snapshots are written to `public/assets/data/backups`. Because that's under `public/`, `server.mjs` (and `middleware.js`) refuse
   every request for `/assets/data/*`, so backups are never served as static files.
 - **No deploy shell.** `server.mjs` applies the database schema itself on boot, via

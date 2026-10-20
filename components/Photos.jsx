@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { uploadPhotos, deletePhoto, updatePhoto, reorderPhotos } from "@/app/actions";
+import { uploadPhotos, deletePhoto, updatePhoto, reorderPhotos, startVideoUpload, finishVideoUpload } from "@/app/actions";
+import { videoTypeOf, probeVideo, putWithProgress } from "@/lib/upload-video";
+import { MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, formatDuration } from "@/lib/media";
 import { compressImage } from "@/lib/compress-image";
 import Field from "./Field";
 import PhotoImage from "./PhotoImage";
@@ -148,10 +150,15 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
   const uploadFiles = async (files, skipped = []) => {
     if (progress) return; // one batch at a time
     setFailures([]);
-    const failed = skipped.map((f) => ({ name: f.name, reason: "That file isn't a photo." }));
+    const failed = skipped.map((f) => ({ name: f.name, reason: "That file isn't a photo or video." }));
     if (!files.length) { setFailures(failed); return; }
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      if (videoTypeOf(file)) {
+        const reason = await uploadVideo(file, i, files.length);
+        if (reason) failed.push({ name: file.name, reason });
+        continue;
+      }
       setProgress({ done: i, total: files.length, step: "Optimising" });
       try {
         const small = await compressImage(file);
@@ -167,6 +174,33 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
     }
     setProgress(null);
     setFailures(failed);
+  };
+
+  // A video goes straight to storage (it's too big to pass through the app):
+  // check it here first, get an upload URL, PUT it with progress, then have
+  // the server confirm what arrived. Returns why it failed, or null.
+  const uploadVideo = async (file, i, total) => {
+    const type = videoTypeOf(file);
+    if (file.size > MAX_VIDEO_BYTES) return "Videos can be up to " + MAX_VIDEO_BYTES / 1024 / 1024 + " MB.";
+    setProgress({ done: i, total, step: "Preparing video" });
+    const { duration, poster } = await probeVideo(file);
+    if (duration && duration > MAX_VIDEO_SECONDS + 0.5) return "Videos can be up to " + MAX_VIDEO_SECONDS + " seconds long — this one is " + formatDuration(duration) + ".";
+    try {
+      const start = await startVideoUpload(pageId, { type, size: file.size, duration });
+      if (start?.error) return start.error;
+      setProgress({ done: i, total, step: "Uploading video", percent: 0 });
+      await putWithProgress(start.uploadUrl, file, type, (f) => setProgress({ done: i, total, step: "Uploading video", percent: Math.round(f * 100) }));
+      setProgress({ done: i, total, step: "Finishing video" });
+      const fd = new FormData();
+      fd.append("pageId", pageId);
+      fd.append("name", start.name);
+      if (duration) fd.append("duration", String(duration));
+      if (poster) fd.append("poster", poster);
+      const res = await finishVideoUpload(fd);
+      return res?.error || null;
+    } catch {
+      return "The upload didn't go through — check your connection and try again.";
+    }
   };
 
   const onPick = (e) => {
@@ -193,7 +227,8 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
       dragDepth.current = 0;
       setDropping(false);
       const all = [...e.dataTransfer.files];
-      uploadFiles(all.filter((f) => f.type.startsWith("image/")), all.filter((f) => !f.type.startsWith("image/")));
+      const usable = (f) => f.type.startsWith("image/") || Boolean(videoTypeOf(f));
+      uploadFiles(all.filter(usable), all.filter((f) => !usable(f)));
     }
   };
 
@@ -217,7 +252,7 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
     <div className={"photo-drop" + (dropping ? " photo-drop-active" : "")} {...dropProps}>
       {dropping && (
         <div className="photo-drop-hint" aria-hidden="true">
-          <i className="ph ph-upload-simple" />Drop photos to add them
+          <i className="ph ph-upload-simple" />Drop photos or videos to add them
         </div>
       )}
       <div ref={grid} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, alignItems: "start" }}>
@@ -228,6 +263,11 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
               onClick={() => setOpen(i)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(i); } }}>
               <PhotoImage photo={p} />
+              {p.kind === "VIDEO" && (
+                <span className="video-badge" aria-label={"Video" + (p.duration ? ", " + formatDuration(p.duration) : "")}>
+                  <i className="ph ph-play" />{p.duration ? formatDuration(p.duration) : ""}
+                </span>
+              )}
               {canEdit && shown.length > 1 && (
                 <button type="button" className="btn btn-icon photo-grip"
                   aria-label={"Move photo " + (i + 1) + " of " + shown.length + " — drag, or use the arrow keys"}
@@ -266,9 +306,11 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
             }}>
               <i className="ph ph-image-square" style={{ fontSize: 20 }} />
               {progress
-                ? progress.step + (progress.total > 1 ? " " + (progress.done + 1) + " of " + progress.total : "") + "…"
-                : <>Add photos<span className="text-muted photo-drop-tip">or drop them here</span></>}
-              <input hidden type="file" name="photos" accept="image/*" multiple disabled={Boolean(progress)} onChange={onPick} />
+                ? progress.step + (progress.total > 1 ? " " + (progress.done + 1) + " of " + progress.total : "") +
+                  (progress.percent != null ? " — " + progress.percent + "%" : "…")
+                : <>Add photos or videos<span className="text-muted photo-drop-tip">or drop them here · videos up to {MAX_VIDEO_SECONDS}s</span></>}
+              <input hidden type="file" name="photos" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-m4v,.mov,.m4v" multiple
+                disabled={Boolean(progress)} onChange={onPick} />
             </label>
           </form>
         )}

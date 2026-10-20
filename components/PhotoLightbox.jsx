@@ -18,11 +18,18 @@ function FittedPhoto({ photo }) {
 
   const rotation = ((Number(photo.rotation) || 0) % 360 + 360) % 360;
   const sideways = rotation === 90 || rotation === 270;
+  const video = photo.kind === "VIDEO";
   const onLoad = (e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
+  // A clip the browser can't decode (e.g. HEVC outside Safari) never reports
+  // a size — fall back to 16:9 so its controls and error still show.
+  const onMeta = (e) => setNatural({ w: e.currentTarget.videoWidth || 1280, h: e.currentTarget.videoHeight || 720 });
 
   if (!natural) {
     // Measure first; nothing shown until the size is known.
-    return <img src={photo.url} alt="" onLoad={onLoad} style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />;
+    const hidden = { position: "absolute", opacity: 0, pointerEvents: "none" };
+    return video
+      ? <video src={photo.url} preload="metadata" muted onLoadedMetadata={onMeta} onError={onMeta} style={hidden} />
+      : <img src={photo.url} alt="" onLoad={onLoad} style={hidden} />;
   }
   const turnedW = sideways ? natural.h : natural.w, turnedH = sideways ? natural.w : natural.h;
   const scale = Math.min(1, (view.w * 0.88) / turnedW, (view.h * 0.76) / turnedH);
@@ -30,15 +37,20 @@ function FittedPhoto({ photo }) {
 
   return (
     <div style={{ position: "relative", width: boxW, height: boxH }}>
-      <img src={photo.url} alt={photo.caption || ""} draggable={false} style={{
-        position: "absolute", left: "50%", top: "50%", borderRadius: 6,
-        // laid out unrotated (so wider than its box when sideways) — opt out
-        // of the global img { max-width: 100% }
-        maxWidth: "none",
-        width: sideways ? boxH : boxW, height: sideways ? boxW : boxH,
-        transform: "translate(-50%, -50%)" + (rotation ? " rotate(" + rotation + "deg)" : ""),
-        transition: "transform .2s ease"
-      }} />
+      {(() => {
+        const style = {
+          position: "absolute", left: "50%", top: "50%", borderRadius: 6, background: "#000",
+          // laid out unrotated (so wider than its box when sideways) — opt out
+          // of the global img { max-width: 100% }
+          maxWidth: "none",
+          width: sideways ? boxH : boxW, height: sideways ? boxW : boxH,
+          transform: "translate(-50%, -50%)" + (rotation ? " rotate(" + rotation + "deg)" : ""),
+          transition: "transform .2s ease"
+        };
+        return video
+          ? <video src={photo.url} poster={photo.posterUrl || undefined} controls autoPlay playsInline style={style} />
+          : <img src={photo.url} alt={photo.caption || ""} draggable={false} style={style} />;
+      })()}
     </div>
   );
 }

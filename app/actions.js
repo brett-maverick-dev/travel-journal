@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { createSession, destroySession, currentUser, requireUser, isAdminUser } from "@/lib/session";
@@ -10,7 +10,11 @@ import { sendVerificationCode, sendPasswordReset, sendBuddyRequestEmail } from "
 import { signBuddyToken, verifyBuddyToken } from "@/lib/buddy-token";
 import { appUrl } from "@/lib/app-url";
 import { can, tripRole, canManageRole, normalizeRole, SHAREABLE_ROLES } from "@/lib/permissions";
-import { saveUpload } from "@/lib/storage";
+import { saveUpload, mediaUrl, UPLOAD_DIR } from "@/lib/storage";
+import { storeConfigured, presignPut, objectInfo, deleteObject } from "@/lib/object-store";
+import { mediaUploadToken } from "@/lib/media-token";
+import { MAX_VIDEO_BYTES, MAX_VIDEO_SECONDS, videoExtension } from "@/lib/media";
+import { stat, unlink } from "node:fs/promises";
 import { geocode, geocodeStop } from "@/lib/geo";
 import { snapshotDatabase, deleteBackup } from "@/lib/backup";
 import { groupPagesByDestination } from "@/lib/pages";
@@ -827,7 +831,7 @@ export async function uploadPhotos(_prev, form) {
   if (!saved) return { error: "That file isn't a photo." };
   const trip = await db.trip.findUnique({ where: { id: page.tripId } });
   if (trip && !trip.coverUrl) {
-    const first = await db.photo.findFirst({ where: { pageId }, orderBy: { position: "asc" } });
+    const first = await db.photo.findFirst({ where: { pageId, kind: "IMAGE" }, orderBy: { position: "asc" } });
     if (first) await db.trip.update({ where: { id: trip.id }, data: { coverUrl: first.url } });
   }
   revalidatePath("/trips/" + page.tripId);
@@ -845,6 +849,73 @@ export async function setTripCover(_prev, form) {
   await db.trip.update({ where: { id: tripId }, data: { coverUrl: url, coverZoom: 1, coverX: 50, coverY: 50 } });
   revalidatePath("/trips/" + tripId);
   revalidatePath("/trips");
+  return { ok: true };
+}
+
+/* ── videos ───────────────────────────────────────────────────────── */
+
+// Videos are too big to pass through the app, so the browser uploads them
+// straight to the bucket: this hands it a short-lived upload URL for a fresh
+// file name, then finishVideoUpload checks what arrived and adds it to the
+// page. (Without a bucket — development — the URL is the app's own
+// /api/media-upload, with a signed token standing in for the pre-signing.)
+const VIDEO_NAME = /^[0-9a-f-]{36}\.(mp4|m4v|mov|webm)$/;
+
+export async function startVideoUpload(pageId, { type, size, duration } = {}) {
+  const page = await db.page.findUnique({ where: { id: String(pageId || "") } });
+  if (!page) return { error: "That page no longer exists." };
+  await assertCan(page.tripId, "upload");
+  const ext = videoExtension(type);
+  if (!ext) return { error: "That video format isn't supported — use MP4, MOV or WebM." };
+  if (!(Number(size) > 0)) return { error: "That video is empty." };
+  if (Number(size) > MAX_VIDEO_BYTES) return { error: "Videos can be up to " + MAX_VIDEO_BYTES / 1024 / 1024 + " MB." };
+  if (Number(duration) > MAX_VIDEO_SECONDS + 0.5) return { error: "Videos can be up to " + MAX_VIDEO_SECONDS + " seconds long." };
+
+  const name = randomUUID() + ext;
+  const uploadUrl = storeConfigured()
+    ? await presignPut(name)
+    : "/api/media-upload?t=" + encodeURIComponent(mediaUploadToken(name));
+  return { name, uploadUrl };
+}
+
+// form: pageId, name (from startVideoUpload), duration, poster (a JPEG frame
+// the browser captured; optional).
+export async function finishVideoUpload(form) {
+  const page = await db.page.findUnique({ where: { id: String(form.get("pageId") || "") } });
+  if (!page) return { error: "That page no longer exists." };
+  const { user } = await assertCan(page.tripId, "upload");
+  const name = String(form.get("name") || "");
+  if (!VIDEO_NAME.test(name)) throw new Error("BAD_NAME");
+
+  // Check what actually arrived — the size the browser claimed isn't proof.
+  let size = 0;
+  if (storeConfigured()) {
+    size = (await objectInfo(name))?.size || 0;
+  } else {
+    size = await stat(UPLOAD_DIR + "/" + name).then((s) => s.size, () => 0);
+  }
+  if (!size) return { error: "The video didn't arrive — try again." };
+  if (size > MAX_VIDEO_BYTES) {
+    await (storeConfigured() ? deleteObject(name) : unlink(UPLOAD_DIR + "/" + name)).catch(() => {});
+    return { error: "Videos can be up to " + MAX_VIDEO_BYTES / 1024 / 1024 + " MB." };
+  }
+
+  let posterUrl = null;
+  const poster = form.get("poster");
+  if (poster && typeof poster.arrayBuffer === "function" && poster.size && String(poster.type).startsWith("image/")) {
+    posterUrl = await saveUpload(poster).catch(() => null);
+  }
+  const duration = Number(form.get("duration"));
+  const position = await db.photo.count({ where: { pageId: page.id } });
+  await db.photo.create({
+    data: {
+      pageId: page.id, url: mediaUrl(name), kind: "VIDEO", posterUrl,
+      duration: Number.isFinite(duration) && duration > 0 ? Math.round(duration * 10) / 10 : null,
+      position, uploadedById: user.id
+    }
+  });
+  revalidatePath("/trips/" + page.tripId);
+  revalidatePath("/trips/" + page.tripId + "/pages/" + page.id);
   return { ok: true };
 }
 

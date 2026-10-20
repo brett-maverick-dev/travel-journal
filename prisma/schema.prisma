@@ -190,6 +190,11 @@ model Photo {
   pageId   String
   page     Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
   url      String @db.VarChar(1024)
+  // IMAGE, or VIDEO — a short clip uploaded straight to the bucket, shown
+  // with posterUrl (a frame the browser captured) until it's played.
+  kind      String  @default("IMAGE") @db.VarChar(8)
+  posterUrl String? @db.VarChar(1024)
+  duration  Float?  // seconds, videos only
   caption  String @db.Text // default "" comes from lib/db.js
   position Int    @default(0)
   // Clockwise turn to display it upright: 0, 90, 180 or 270. Applied when
