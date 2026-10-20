@@ -252,7 +252,10 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
     <div className={"photo-drop" + (dropping ? " photo-drop-active" : "")} {...dropProps}>
       {dropping && (
         <div className="photo-drop-hint" aria-hidden="true">
-          <i className="ph ph-upload-simple" />Drop photos or videos to add them
+          <span>
+            <i className="ph ph-upload-simple" />Drop photos or videos to add them
+            <small>From the Photos app? Videos arrive as a still — drag the file from Finder instead.</small>
+          </span>
         </div>
       )}
       <div ref={grid} style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, alignItems: "start" }}>
@@ -315,6 +318,15 @@ export default function Photos({ pageId, photos, canUpload = false, canEditAll =
           </form>
         )}
       </div>
+      {/* macOS Photos can't hand a browser the video itself when you drag it
+          out (it uses file promises, which web pages can't accept), so the
+          browser gets a still preview frame instead. */}
+      {canUpload && (
+        <p className="text-muted photo-drag-tip">
+          <i className="ph ph-info" /> Tip: dragging a video straight out of the Photos app only sends a still image —
+          drag the video file from Finder, or use <em>Add photos or videos</em>.
+        </p>
+      )}
       {failures.length > 0 && (
         <div role="alert" style={{ fontSize: 12, marginTop: 8, color: "var(--color-accent-300)" }}>
           {failures.length === 1 ? "1 file wasn't added:" : failures.length + " files weren't added:"}

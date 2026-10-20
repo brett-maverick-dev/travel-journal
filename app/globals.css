@@ -436,7 +436,12 @@ a:hover { color: var(--color-accent-300); }
 .photo-drop-hint { position: absolute; inset: -6px; z-index: 3; display: flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: 12px; pointer-events: none; font-size: 14px; font-weight: 600; color: var(--color-text);
   background: color-mix(in srgb, var(--color-accent) 16%, color-mix(in srgb, var(--color-bg) 70%, transparent)); }
-.photo-drop-hint i { font-size: 20px; color: var(--color-accent); }
+.photo-drop-hint i { font-size: 20px; color: var(--color-accent); vertical-align: -3px; margin-right: 8px; }
+.photo-drop-hint > span { text-align: center; }
+.photo-drop-hint small { display: block; margin-top: 6px; font-size: 12px; font-weight: 400; color: var(--color-neutral-300); }
+.photo-drag-tip { margin: 8px 0 0; font-size: 11px; line-height: 1.45; }
+.photo-drag-tip i { vertical-align: -1px; }
+@media (hover: none) { .photo-drag-tip { display: none; } } /* touch screens can't drag files in */
 .photo-drop-tip { display: block; font-size: 11px; margin-top: 2px; }
 @media (hover: none) { .photo-drop-tip { display: none; } } /* touch screens can't drag files in */
 
