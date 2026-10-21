@@ -6,7 +6,7 @@
     "postinstall": "node scripts/normalize-routes.mjs",
     "routes": "node scripts/normalize-routes.mjs",
     "dev": "node scripts/normalize-routes.mjs && next dev",
-    "build": "node scripts/normalize-routes.mjs && prisma generate && next build",
+    "build": "node scripts/normalize-routes.mjs && node scripts/clean-next.mjs && prisma generate && next build",
     "start": "node server.mjs",
     "migrate": "prisma migrate dev --name init",
     "seed": "node prisma/seed.mjs",

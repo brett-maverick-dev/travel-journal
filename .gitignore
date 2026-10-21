@@ -1,6 +1,7 @@
 # Never commit these — the host rejects uploads containing node_modules
 node_modules
 .next
+.next-old-*
 .env
 .env.*
 !.env.example
