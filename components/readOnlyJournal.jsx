@@ -108,11 +108,20 @@ export function readOnlyJournal(trip, { wantDest, wantPage, photosFor, commentsF
 
   const journalPages = Object.fromEntries(days.map((p) => {
     const acts = trip.pages.filter((x) => x.kind === "ACTIVITY" && x.parentId === p.id);
+    // A subpage's main page, when this viewer can see it (see groupPagesByDestination).
+    const main = p.parentId ? days.find((d) => d.id === p.parentId && !d.parentId) : null;
     return [p.id, {
       label: fmt(p.date),
       title: p.title,
+      parentId: main?.id,
       panel: (
         <article>
+          {main && (
+            <div className="text-muted" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 6 }}>
+              <i className="ph ph-arrow-elbow-down-right" style={{ color: "var(--color-accent)" }} />
+              <span>Part of {main.title || fmt(main.date)}</span>
+            </div>
+          )}
           <div className="card-kicker">{fmt(p.date)}{p.place ? " · " + p.place : ""}</div>
           <h2 style={{ margin: "6px 0 12px" }}>{p.title}</h2>
           {p.notes.split("\n").filter(Boolean).map((para, i) => (

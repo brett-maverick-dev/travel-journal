@@ -644,8 +644,9 @@ async function removeDestinationAndBlankPages(dest) {
   ]);
   const { groups } = groupPagesByDestination(destinations, dayPages);
   const mine = groups.get(dest.id) || [];
+  // Activity pages and subpages both count as something written.
   const withActivities = new Set((await db.page.findMany({
-    where: { tripId: dest.tripId, kind: "ACTIVITY", parentId: { in: mine.map((p) => p.id) } },
+    where: { tripId: dest.tripId, parentId: { in: mine.map((p) => p.id) } },
     select: { parentId: true }
   })).map((a) => a.parentId));
   const blank = mine.filter((p) =>
@@ -764,6 +765,38 @@ export async function addActivityPage(tripId, parentId) {
   redirect("/trips/" + tripId + "/pages/" + page.id);
 }
 
+// Drag and drop on the carousel's page tabs. With a parentId, the page becomes
+// a subpage of that one, at `index` among its subpages (the end if left out);
+// a page that had subpages of its own brings them along right after it, since
+// subpages only go one level deep. With parentId null it's a main page again,
+// back in date order. Both must be day pages of the same trip.
+export async function movePage(id, parentId, index) {
+  const page = await db.page.findUnique({ where: { id } });
+  if (!page || page.kind !== "DAY") throw new Error("NOT_FOUND");
+  await assertCan(page.tripId, "edit");
+
+  if (!parentId) {
+    if (page.parentId) await db.page.update({ where: { id }, data: { parentId: null } });
+    revalidatePath("/trips/" + page.tripId);
+    return;
+  }
+
+  const parent = await db.page.findUnique({ where: { id: parentId } });
+  if (!parent || parent.tripId !== page.tripId || parent.kind !== "DAY" || parent.id === id) throw new Error("NOT_FOUND");
+  if (parent.parentId) throw new Error("NESTED"); // the tabs only offer main pages as targets
+
+  const [own, siblings] = await Promise.all([
+    db.page.findMany({ where: { parentId: id, kind: "DAY" }, orderBy: [{ position: "asc" }, { date: "asc" }] }),
+    db.page.findMany({ where: { parentId, kind: "DAY", NOT: { id } }, orderBy: [{ position: "asc" }, { date: "asc" }] })
+  ]);
+  const order = siblings.map((p) => p.id);
+  const at = Number.isInteger(index) ? Math.max(0, Math.min(index, order.length)) : order.length;
+  order.splice(at, 0, id, ...own.map((p) => p.id));
+  await db.$transaction(order.map((pid, i) =>
+    db.page.update({ where: { id: pid }, data: { parentId, position: i } })));
+  revalidatePath("/trips/" + page.tripId);
+}
+
 const PAGE_FIELDS = ["title", "notes", "place", "weather", "spend", "steps", "tags", "time"];
 
 export async function updatePage(id, field, value) {
@@ -788,12 +821,15 @@ export async function deletePage(id) {
   const page = await db.page.findUnique({ where: { id } });
   if (!page) return;
   await assertCan(page.tripId, "delete");
-  // The page and its activity pages, children first (see deleteTripsTx).
-  const pages = { OR: [{ id }, { parentId: id }] };
+  // The page and its activity pages, children first (see deleteTripsTx). Its
+  // subpages are pages in their own right: they stay, as main pages.
+  const activities = { parentId: id, kind: "ACTIVITY" };
+  const pages = { OR: [{ id }, activities] };
   await db.$transaction([
     db.comment.deleteMany({ where: { page: pages } }),
     db.photo.deleteMany({ where: { page: pages } }),
-    db.page.deleteMany({ where: { parentId: id } }),
+    db.page.deleteMany({ where: activities }),
+    db.page.updateMany({ where: { parentId: id, kind: "DAY" }, data: { parentId: null } }),
     db.page.delete({ where: { id } })
   ]);
   revalidatePath("/trips/" + page.tripId);

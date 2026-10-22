@@ -378,6 +378,26 @@ a:hover { color: var(--color-accent-300); }
 .page-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .page-chip-date { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
 .page-chip-title { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Subpages: a main page's tab with its subpages' tabs stacked below it. */
+.page-chips { align-items: flex-start; }
+.page-chip-stack { flex: 0 0 auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; max-width: 180px;
+  scroll-snap-align: start; }
+.page-chip-stack .page-chip { max-width: none; }
+.page-chip-sub { margin-left: 12px; padding: 5px 9px; }
+.page-chip-sub .page-chip-date { display: flex; align-items: center; gap: 4px; }
+.page-chip[data-movable="1"] { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.page-chips[data-dragging="1"], .page-chips[data-dragging="1"] .page-chip { cursor: grabbing; }
+.page-chip[data-dragging="1"] { opacity: .45; }
+.page-chip[data-drop="1"] { border-color: var(--color-accent); border-style: dashed;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
+.page-chip-slot { margin-left: 12px; display: flex; align-items: center; gap: 4px; padding: 6px 9px; font-size: 11px;
+  border: 1px dashed var(--color-divider); border-radius: var(--radius-md); color: var(--color-neutral-500); }
+.page-chip-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; max-width: 200px;
+  padding: 5px 10px; border-radius: var(--radius-md); border: 1px solid var(--color-accent); background: var(--color-bg);
+  color: var(--color-text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
+.page-chip-slot[data-drop="1"] { border-color: var(--color-accent); color: var(--color-text);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
 
 .carousel-stage { overflow-x: clip; overflow-clip-margin: 4px; touch-action: pan-y; }
 .carousel-slide { animation-duration: .28s; animation-timing-function: cubic-bezier(.2, .7, .2, 1); animation-fill-mode: both; }

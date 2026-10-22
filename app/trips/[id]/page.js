@@ -15,12 +15,13 @@ import Comments from "@/components/Comments";
 import { readOnlyJournal } from "@/components/readOnlyJournal";
 import DestinationActions from "./DestinationActions";
 import RemoveLayoverButton from "./RemoveLayoverButton";
+import MakeMainPageButton from "./MakeMainPageButton";
 import TripJournal from "@/components/TripJournal";
 import { currentUser } from "@/lib/session";
 import { tripRole, abilities, normalizeRole } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { withDepartureCoords } from "@/lib/geo";
-import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, updateDeparture, updateArrival, addLayover, updateLayover, updateReturn } from "@/app/actions";
+import { updateDestination, updatePage, renameTrip, addDestination, addDayPage, addActivityPage, movePage, updateDeparture, updateArrival, addLayover, updateLayover, updateReturn } from "@/app/actions";
 import { fmt, fmtRange, inputDate, nights, tagList, TRANSPORT, TRANSPORT_ICON, mapStops, coverFrame } from "@/lib/format";
 import { groupPagesByDestination, initialDestination, OTHER_GROUP, DEPARTURE_GROUP, RETURN_GROUP } from "@/lib/pages";
 
@@ -243,11 +244,22 @@ export default async function TripPage({ params, searchParams }) {
     (other.length ? OTHER_GROUP : DEPARTURE_GROUP);
   const initialPageId = groupOf(wantPage) ? wantPage : null;
 
+  // A subpage's main page (see groupPagesByDestination), if it has one.
+  const mainOf = (p) => (p.parentId && days.find((d) => d.id === p.parentId && !d.parentId)) || null;
+
   const journalPages = Object.fromEntries(days.map((p) => [p.id, {
     label: fmt(p.date),
     title: p.title,
+    parentId: mainOf(p)?.id,
     panel: (
       <div>
+        {mainOf(p) && (
+          <div className="text-muted" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 12, marginBottom: 8 }}>
+            <i className="ph ph-arrow-elbow-down-right" style={{ color: "var(--color-accent)" }} />
+            <span>Subpage of <Link href={"/trips/" + trip.id + "?p=" + mainOf(p).id}>{mainOf(p).title || fmt(mainOf(p).date)}</Link></span>
+            <MakeMainPageButton pageId={p.id} />
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <Field type="date" value={inputDate(p.date)} save={updatePage.bind(null, p.id, "date")}
             style={{ fontSize: 11, minHeight: 28, padding: "3px 6px", width: 132 }} />
@@ -364,6 +376,7 @@ export default async function TripPage({ params, searchParams }) {
         map={<TripMap trips={mapTrips} height={186} only />}
         {...journal}
         addPage={may.edit ? addDayPage.bind(null, trip.id) : undefined}
+        movePage={may.edit ? movePage : undefined}
         emptyHint={may.edit ? "No pages for this destination yet." : "Nothing written for this stop yet."}
         addDestination={may.edit ? (
           <AddButton action={addDestination.bind(null, trip.id)} label="Add destination"
