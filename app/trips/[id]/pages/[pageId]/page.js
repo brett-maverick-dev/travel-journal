@@ -44,12 +44,12 @@ export default async function ActivityPage({ params }) {
         <div className="card-kicker">Activity page · {page.trip.name}</div>
         {may.edit ? (
           <>
-            <Field value={page.title} save={updatePage.bind(null, page.id, "title")}
-              style={{ border: 0, background: "transparent", padding: 0, fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 38, minHeight: "auto", letterSpacing: "-0.015em", margin: "6px 0 10px" }} />
+            <Field quiet value={page.title} save={updatePage.bind(null, page.id, "title")} draftKey={"page:" + page.id + ":title"}
+              style={{ padding: "2px 12px", margin: "6px -12px 10px", width: "calc(100% + 24px)", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 38, minHeight: "auto", letterSpacing: "-0.015em" }} />
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20, maxWidth: 520 }}>
-              <Field value={page.time || ""} placeholder="Time" save={updatePage.bind(null, page.id, "time")} style={{ fontSize: 12, minHeight: 32, width: 110 }} />
-              <Field value={page.place} placeholder="Place" save={updatePage.bind(null, page.id, "place")} style={{ fontSize: 12, minHeight: 32, width: 180 }} />
-              <Field type="date" value={inputDate(page.date)} save={updatePage.bind(null, page.id, "date")} style={{ fontSize: 12, minHeight: 32, width: 150 }} />
+              <Field quiet value={page.time || ""} placeholder="Time" save={updatePage.bind(null, page.id, "time")} style={{ fontSize: 12, minHeight: 32, width: 110 }} />
+              <Field quiet value={page.place} placeholder="Place" save={updatePage.bind(null, page.id, "place")} style={{ fontSize: 12, minHeight: 32, width: 180 }} />
+              <Field quiet type="date" value={inputDate(page.date)} save={updatePage.bind(null, page.id, "date")} style={{ fontSize: 12, minHeight: 32, width: 150 }} />
             </div>
           </>
         ) : (
@@ -68,12 +68,12 @@ export default async function ActivityPage({ params }) {
         {may.edit ? (
           <>
             <div style={{ marginTop: 20 }}>
-              <Field as="textarea" value={page.notes} save={updatePage.bind(null, page.id, "notes")}
+              <Field quiet as="textarea" value={page.notes} save={updatePage.bind(null, page.id, "notes")} draftKey={"page:" + page.id + ":notes"}
                 placeholder="Why this one deserves its own page…"
-                style={{ minHeight: 230, fontSize: 16, lineHeight: 1.7, padding: "16px 18px" }} />
+                style={{ minHeight: 200, fontSize: 16, lineHeight: 1.7, padding: "10px 12px", margin: "0 -12px", width: "calc(100% + 24px)" }} />
             </div>
             <div style={{ marginTop: 14, maxWidth: 420 }}>
-              <Field value={page.tags} placeholder="Tags, comma separated" save={updatePage.bind(null, page.id, "tags")} style={{ fontSize: 12, minHeight: 32 }} />
+              <Field quiet value={page.tags} placeholder="Tags, comma separated" save={updatePage.bind(null, page.id, "tags")} draftKey={"page:" + page.id + ":tags"} style={{ fontSize: 12, minHeight: 32 }} />
             </div>
           </>
         ) : (

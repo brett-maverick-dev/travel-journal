@@ -9,6 +9,7 @@ import CoverUpload from "./CoverUpload";
 import CoverImage from "./CoverImage";
 import AddButton from "./AddButton";
 import DeleteTripButton from "./DeleteTripButton";
+import ViewToggle from "./ViewToggle";
 import DeletePageButton from "@/components/DeletePageButton";
 import TripBuddies from "./TripBuddies";
 import Comments from "@/components/Comments";
@@ -27,7 +28,7 @@ import { groupPagesByDestination, initialDestination, OTHER_GROUP, DEPARTURE_GRO
 
 export default async function TripPage({ params, searchParams }) {
   const { id } = await params;
-  const { d: wantDest, p: wantPage } = await searchParams;
+  const { d: wantDest, p: wantPage, view } = await searchParams;
   const user = await currentUser();
   if (!user) redirect("/signin");
 
@@ -84,7 +85,7 @@ export default async function TripPage({ params, searchParams }) {
       {list.map((l, i) => (
         <JourneyStop key={l.id} icon="ph-arrows-clockwise" label={"Layover" + (list.length > 1 ? " " + (i + 1) : "")}
           notFound={l.name && l.lat == null}>
-          <Field value={l.name} placeholder="City or airport, e.g. LAX" save={updateLayover.bind(null, l.id)}
+          <Field quiet value={l.name} placeholder="City or airport, e.g. LAX" save={updateLayover.bind(null, l.id)}
             style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
           <RemoveLayoverButton layoverId={l.id} />
         </JourneyStop>
@@ -99,10 +100,10 @@ export default async function TripPage({ params, searchParams }) {
   const departureRow = (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingBottom: 4 }}>
       <JourneyStop icon="ph-house-line" label="Leaving from">
-        <Field value={trip.departureCity} placeholder="Home city (optional)" save={updateDeparture.bind(null, trip.id, "city")}
+        <Field quiet value={trip.departureCity} placeholder="Home city (optional)" save={updateDeparture.bind(null, trip.id, "city")}
           style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
         {trip.departureCity && (
-          <Field type="date" value={trip.departureDate ? inputDate(trip.departureDate) : ""}
+          <Field quiet type="date" value={trip.departureDate ? inputDate(trip.departureDate) : ""}
             save={updateDeparture.bind(null, trip.id, "date")}
             style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
         )}
@@ -111,7 +112,7 @@ export default async function TripPage({ params, searchParams }) {
         <>
           {layoverRows(departureLayovers, "DEPARTURE")}
           <JourneyStop icon="ph-airplane-landing" label="Arriving at" notFound={trip.arrivalCity && trip.arrivalLat == null}>
-            <Field value={trip.arrivalCity} placeholder="City or airport, e.g. NRT" save={updateArrival.bind(null, trip.id)}
+            <Field quiet value={trip.arrivalCity} placeholder="City or airport, e.g. NRT" save={updateArrival.bind(null, trip.id)}
               style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
           </JourneyStop>
         </>
@@ -123,9 +124,9 @@ export default async function TripPage({ params, searchParams }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingBottom: 4 }}>
       <JourneyStop icon="ph-airplane-takeoff" label="Return — departing from"
         notFound={trip.returnFromCity && trip.returnFromLat == null}>
-        <Field value={trip.returnFromCity} placeholder="City or airport (optional)" save={updateReturn.bind(null, trip.id, "from")}
+        <Field quiet value={trip.returnFromCity} placeholder="City or airport (optional)" save={updateReturn.bind(null, trip.id, "from")}
           style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
-        <Field type="date" value={trip.returnDate ? inputDate(trip.returnDate) : ""}
+        <Field quiet type="date" value={trip.returnDate ? inputDate(trip.returnDate) : ""}
           save={updateReturn.bind(null, trip.id, "date")}
           style={{ fontSize: 11, minHeight: 30, padding: "3px 6px", width: 124 }} />
       </JourneyStop>
@@ -133,7 +134,7 @@ export default async function TripPage({ params, searchParams }) {
         <>
           {layoverRows(returnLayovers, "RETURN")}
           <JourneyStop icon="ph-house-line" label="Arriving home at" notFound={trip.returnToCity && trip.returnToLat == null}>
-            <Field value={trip.returnToCity} placeholder={trip.departureCity || "Home city"} save={updateReturn.bind(null, trip.id, "to")}
+            <Field quiet value={trip.returnToCity} placeholder={trip.departureCity || "Home city"} save={updateReturn.bind(null, trip.id, "to")}
               style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1, minWidth: 0 }} />
           </JourneyStop>
         </>
@@ -164,16 +165,16 @@ export default async function TripPage({ params, searchParams }) {
           <span className="dest-dot" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingBottom: 6, minWidth: 0 }}>
-          <Field value={d.name} save={updateDestination.bind(null, d.id, "name")}
+          <Field quiet value={d.name} save={updateDestination.bind(null, d.id, "name")}
             style={{ borderColor: "transparent", background: "transparent", padding: "2px 4px", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 16, minHeight: "auto" }} />
           <div style={{ display: "flex", gap: 6 }}>
-            <Field type="date" value={inputDate(d.arrive)} save={updateDestination.bind(null, d.id, "arrive")}
+            <Field quiet type="date" value={inputDate(d.arrive)} save={updateDestination.bind(null, d.id, "arrive")}
               style={{ fontSize: 11, minHeight: 30, padding: "3px 6px" }} />
-            <Field type="date" value={inputDate(d.depart)} save={updateDestination.bind(null, d.id, "depart")}
+            <Field quiet type="date" value={inputDate(d.depart)} save={updateDestination.bind(null, d.id, "depart")}
               style={{ fontSize: 11, minHeight: 30, padding: "3px 6px" }} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Field as="select" options={TRANSPORT} value={d.transport}
+            <Field quiet as="select" options={TRANSPORT} value={d.transport}
               save={updateDestination.bind(null, d.id, "transport")}
               style={{ fontSize: 12, minHeight: 30, padding: "3px 6px", flex: 1 }} />
             <span style={{ fontSize: 11, color: "var(--color-accent-300)", whiteSpace: "nowrap" }}>{nights(d.arrive, d.depart)}</span>
@@ -261,9 +262,9 @@ export default async function TripPage({ params, searchParams }) {
           </div>
         )}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Field type="date" value={inputDate(p.date)} save={updatePage.bind(null, p.id, "date")}
+          <Field quiet type="date" value={inputDate(p.date)} save={updatePage.bind(null, p.id, "date")}
             style={{ fontSize: 11, minHeight: 28, padding: "3px 6px", width: 132 }} />
-          <Field value={p.place} placeholder="Place" save={updatePage.bind(null, p.id, "place")}
+          <Field quiet value={p.place} placeholder="Place" save={updatePage.bind(null, p.id, "place")}
             style={{ fontSize: 11, minHeight: 28, padding: "3px 6px", width: 150 }} />
           <div className="text-muted" style={{ fontSize: 11 }}>
             {[p.weather, p.spend, p.steps].filter(Boolean).join("  ·  ")}
@@ -271,20 +272,21 @@ export default async function TripPage({ params, searchParams }) {
           {may.delete && <DeletePageButton pageId={p.id} confirmLabel={p.title ? '"' + p.title + '"' : "this page"} compact
             style={{ marginLeft: "auto" }} />}
         </div>
-        <Field value={p.title} placeholder="Give this day a title" save={updatePage.bind(null, p.id, "title")}
-          style={{ border: 0, background: "transparent", padding: 0, fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 31, minHeight: "auto", letterSpacing: "-0.015em", margin: "6px 0 14px" }} />
-        <Field as="textarea" value={p.notes} save={updatePage.bind(null, p.id, "notes")}
-          placeholder="What happened today?"
-          style={{ minHeight: 200, fontSize: 15, lineHeight: 1.65, padding: "14px 16px" }} />
+        <Field quiet value={p.title} placeholder="Give this day a title" save={updatePage.bind(null, p.id, "title")}
+          draftKey={"page:" + p.id + ":title"}
+          style={{ padding: "2px 12px", margin: "6px -12px 8px", width: "calc(100% + 24px)", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 31, minHeight: "auto", letterSpacing: "-0.015em" }} />
+        <Field quiet as="textarea" value={p.notes} save={updatePage.bind(null, p.id, "notes")}
+          draftKey={"page:" + p.id + ":notes"} placeholder="What happened today?"
+          style={{ minHeight: 160, fontSize: 16, lineHeight: 1.7, padding: "10px 12px", margin: "0 -12px", width: "calc(100% + 24px)" }} />
 
         <div style={{ marginTop: 14 }}>
           {photosFor(p)}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 14 }}>
-          <Field value={p.weather} placeholder="Weather" save={updatePage.bind(null, p.id, "weather")} style={{ fontSize: 12, minHeight: 32 }} />
-          <Field value={p.spend} placeholder="Spend" save={updatePage.bind(null, p.id, "spend")} style={{ fontSize: 12, minHeight: 32 }} />
-          <Field value={p.tags} placeholder="Tags, comma separated" save={updatePage.bind(null, p.id, "tags")} style={{ fontSize: 12, minHeight: 32 }} />
+          <Field quiet value={p.weather} placeholder="Weather" save={updatePage.bind(null, p.id, "weather")} draftKey={"page:" + p.id + ":weather"} style={{ fontSize: 12, minHeight: 32 }} />
+          <Field quiet value={p.spend} placeholder="Spend" save={updatePage.bind(null, p.id, "spend")} draftKey={"page:" + p.id + ":spend"} style={{ fontSize: 12, minHeight: 32 }} />
+          <Field quiet value={p.tags} placeholder="Tags, comma separated" save={updatePage.bind(null, p.id, "tags")} draftKey={"page:" + p.id + ":tags"} style={{ fontSize: 12, minHeight: 32 }} />
         </div>
         {tagList(p.tags).length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
@@ -315,9 +317,17 @@ export default async function TripPage({ params, searchParams }) {
 
   // Viewers and Contributors read the journal rather than edit it: the
   // public layout, but with hidden pages, their photo uploads and comments.
-  const journal = may.edit
+  // Editors can switch to Reader view (?view=read): the trip as people they
+  // share it with read it — hidden pages left out, nothing editable.
+  const reading = may.edit && view === "read";
+  const journal = may.edit && !reading
     ? { destinations: journalDestinations, groups: journalGroups, pages: journalPages, initialDestId, initialPageId }
-    : readOnlyJournal(trip, { wantDest, wantPage, photosFor: (p) => (may.upload || p.photos.length ? photosFor(p) : null), commentsFor });
+    : reading
+      ? readOnlyJournal({ ...trip, pages: trip.pages.filter((p) => !p.hidden) }, {
+          wantDest, wantPage, commentsFor,
+          photosFor: (p) => (p.photos.length ? <Photos pageId={p.id} photos={p.photos} /> : null)
+        })
+      : readOnlyJournal(trip, { wantDest, wantPage, photosFor: (p) => (may.upload || p.photos.length ? photosFor(p) : null), commentsFor });
   const mapTrips = [{
     id: trip.id, name: trip.name, country: trip.country, coverUrl: trip.coverUrl, coverFrame: coverFrame(trip),
     dateRange: fmtRange(trip.startDate, trip.endDate), href: "/trips/" + trip.id,
@@ -330,24 +340,21 @@ export default async function TripPage({ params, searchParams }) {
 
       <div style={{ position: "relative", height: 340, overflow: "hidden", background: "var(--color-neutral-900)" }}>
         {trip.coverUrl
-          ? <CoverImage tripId={trip.id} url={trip.coverUrl} frame={coverFrame(trip)} canEdit={may.edit} />
+          ? <CoverImage tripId={trip.id} url={trip.coverUrl} frame={coverFrame(trip)} canEdit={may.edit && !reading} />
           : <div style={{ position: "absolute", inset: 0 }} />}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, var(--color-bg) 2%, color-mix(in srgb, var(--color-bg) 55%, transparent) 45%, transparent)" }} />
-        <div style={{ position: "absolute", left: 34, top: 22, display: "flex", gap: 8 }}>
+        <div className="hero-actions" style={{ position: "absolute", left: 34, right: 34, top: 22, display: "flex", flexWrap: "wrap", gap: 8 }}>
           <Link href="/trips" className="btn btn-secondary" style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }}>
             <i className="ph ph-arrow-left" />All trips
           </Link>
-          {may.edit && <CoverUpload tripId={trip.id} hasCover={Boolean(trip.coverUrl)} />}
-          {may.deleteTrip && (
-            <DeleteTripButton tripId={trip.id} tripName={trip.name}
-              style={{ background: "color-mix(in srgb, var(--color-bg) 70%, transparent)" }} />
-          )}
+          {may.edit && <ViewToggle reading={reading} />}
+          {may.edit && !reading && <CoverUpload tripId={trip.id} hasCover={Boolean(trip.coverUrl)} />}
         </div>
-        <div style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", gap: 26, flexWrap: "wrap" }}>
+        <div className="hero-title" style={{ position: "absolute", left: 34, right: 34, bottom: 26, display: "flex", alignItems: "flex-end", gap: 26, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 420px", minWidth: 0 }}>
             <div className="card-kicker">{trip.country || trip.destinations[0]?.name}</div>
-            {may.edit ? (
-              <Field value={trip.name} save={renameTrip.bind(null, trip.id)}
+            {may.edit && !reading ? (
+              <Field quiet value={trip.name} save={renameTrip.bind(null, trip.id)}
                 style={{ border: 0, background: "transparent", padding: 0, margin: "4px 0 6px", fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 46, minHeight: "auto", letterSpacing: "-0.015em", width: "100%" }} />
             ) : (
               <h1 style={{ margin: "4px 0 6px", fontSize: 46, letterSpacing: "-0.015em" }}>{trip.name}</h1>
@@ -367,7 +374,7 @@ export default async function TripPage({ params, searchParams }) {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1420, margin: "0 auto", padding: "18px 34px 0" }}>
+      <div className="trip-row" style={{ maxWidth: 1420, margin: "0 auto", padding: "18px 34px 0" }}>
         <TripBuddies tripId={trip.id} myRole={role} meId={user.id} owner={trip.user}
           members={trip.buddies.map((b) => ({ user: b.user, role: normalizeRole(b.role) }))} available={availableBuddies} />
       </div>
@@ -375,14 +382,21 @@ export default async function TripPage({ params, searchParams }) {
       <TripJournal
         map={<TripMap trips={mapTrips} height={186} only />}
         {...journal}
-        addPage={may.edit ? addDayPage.bind(null, trip.id) : undefined}
-        movePage={may.edit ? movePage : undefined}
+        addPage={may.edit && !reading ? addDayPage.bind(null, trip.id) : undefined}
+        movePage={may.edit && !reading ? movePage : undefined}
         emptyHint={may.edit ? "No pages for this destination yet." : "Nothing written for this stop yet."}
-        addDestination={may.edit ? (
+        addDestination={may.edit && !reading ? (
           <AddButton action={addDestination.bind(null, trip.id)} label="Add destination"
             style={{ marginLeft: 36, marginTop: 10, padding: "8px 12px", fontSize: 12, width: "calc(100% - 36px)" }} />
         ) : null}
       />
+
+      {/* Out of the way down here rather than beside "All trips" at the top. */}
+      {may.deleteTrip && !reading && (
+        <div className="trip-row" style={{ maxWidth: 1420, margin: "0 auto", padding: "0 34px 40px", display: "flex", justifyContent: "flex-end" }}>
+          <DeleteTripButton tripId={trip.id} tripName={trip.name} />
+        </div>
+      )}
     </>
   );
 }

@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { signOut } from "@/app/actions";
 import { isAdminUser } from "@/lib/session";
+import NavMenu from "./NavMenu";
+import SaveStatus from "./SaveStatus";
 
 export default function Nav({ user, active }) {
   const email = user?.email || "";
   const avatarUrl = user?.avatarUrl;
   return (
+    <>
     <div className="nav" style={{
       padding: "14px 34px", position: "sticky", top: 0, zIndex: 20,
       background: "color-mix(in srgb, var(--color-bg) 88%, transparent)",
@@ -20,16 +23,19 @@ export default function Nav({ user, active }) {
         }} />
         Trekkster
       </Link>
-      <Link href="/trips" aria-current={active === "trips" ? "page" : undefined}>Trips</Link>
-      <Link href="/trips#map">Map</Link>
-      <Link href="/buddies" aria-current={active === "buddies" ? "page" : undefined}>Buddies</Link>
-      <Link href="/profile" aria-current={active === "profile" ? "page" : undefined}>Profile</Link>
-      {isAdminUser(user) && (
-        <Link href="/admin" aria-current={active === "admin" ? "page" : undefined}>Admin</Link>
-      )}
-      <form action={signOut}>
-        <button className="btn btn-secondary" type="submit">Sign out</button>
-      </form>
+      {/* Folds behind a menu button on narrow screens. */}
+      <NavMenu>
+        <Link href="/trips" aria-current={active === "trips" ? "page" : undefined}>Trips</Link>
+        <Link href="/trips#map">Map</Link>
+        <Link href="/buddies" aria-current={active === "buddies" ? "page" : undefined}>Buddies</Link>
+        <Link href="/profile" aria-current={active === "profile" ? "page" : undefined}>Profile</Link>
+        {isAdminUser(user) && (
+          <Link href="/admin" aria-current={active === "admin" ? "page" : undefined}>Admin</Link>
+        )}
+        <form action={signOut}>
+          <button className="btn btn-secondary" type="submit">Sign out</button>
+        </form>
+      </NavMenu>
       <Link href="/profile" title={email} style={{
         width: 30, height: 30, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center",
         fontSize: 11, background: "var(--color-accent-800)", color: "var(--color-accent-100)"
@@ -39,5 +45,8 @@ export default function Nav({ user, active }) {
           : (email || "me").slice(0, 2).toUpperCase()}
       </Link>
     </div>
+    {/* Outside the nav: its backdrop blur would pin a fixed child to the nav. */}
+    <SaveStatus />
+    </>
   );
 }

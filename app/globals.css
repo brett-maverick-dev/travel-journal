@@ -399,7 +399,10 @@ a:hover { color: var(--color-accent-300); }
 .page-chip-slot[data-drop="1"] { border-color: var(--color-accent); color: var(--color-text);
   background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
 
-.carousel-stage { overflow-x: clip; overflow-clip-margin: 4px; touch-action: pan-y; }
+.carousel-stage { overflow-x: clip; touch-action: pan-y;
+  /* 14px of room each side for the quiet fields' hover box, which sticks out
+     past the text (overflow-clip-margin doesn't apply to a one-axis clip). */
+  padding: 0 14px; margin: 0 -14px; }
 .carousel-slide { animation-duration: .28s; animation-timing-function: cubic-bezier(.2, .7, .2, 1); animation-fill-mode: both; }
 .carousel-in-next { animation-name: carousel-in-next; }
 .carousel-in-prev { animation-name: carousel-in-prev; }
@@ -470,3 +473,72 @@ a:hover { color: var(--color-accent-300); }
   padding: 3px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1; color: #fff;
   background: rgba(8, 9, 16, .72); pointer-events: none; }
 .video-badge i { font-size: 11px; }
+
+/* — inline editing (components/Field.jsx) — */
+/* Quiet fields read as text until you point at them or click in. */
+.input-quiet { background: transparent; border-color: transparent; }
+.input-quiet:hover { border-color: var(--color-divider); background: color-mix(in srgb, var(--color-text) 3%, transparent); }
+.input-quiet:focus, .input-quiet:focus-visible { border-color: var(--color-accent); background: var(--color-surface); }
+.input-quiet::placeholder { color: var(--color-neutral-500); }
+select.input-quiet { appearance: none; -webkit-appearance: none; cursor: pointer; }
+input[type="date"].input-quiet::-webkit-calendar-picker-indicator { opacity: 0; transition: opacity .16s ease; }
+input[type="date"].input-quiet:hover::-webkit-calendar-picker-indicator,
+input[type="date"].input-quiet:focus::-webkit-calendar-picker-indicator { opacity: .7; }
+/* No hover on touch screens: a faint underline marks what can be edited. */
+@media (hover: none) {
+  .input-quiet { border-bottom-color: color-mix(in srgb, var(--color-divider) 70%, transparent); }
+  input[type="date"].input-quiet::-webkit-calendar-picker-indicator { opacity: .5; }
+}
+textarea.input-grow { resize: none; overflow: hidden; }
+
+/* Saving… / Saved / not saved yet (components/SaveStatus.jsx). */
+.save-status { position: fixed; left: 16px; bottom: 16px; z-index: 1500; display: flex; align-items: center; gap: 8px;
+  max-width: calc(100vw - 32px); padding: 8px 14px; border-radius: 999px; font-size: 12px;
+  background: var(--color-surface); border: 1px solid var(--color-divider); color: var(--color-text);
+  box-shadow: 0 6px 24px rgb(0 0 0 / .3); transition: opacity .2s ease, transform .2s ease; }
+.save-status[data-state="hidden"] { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.save-status[data-state="error"] { border-color: var(--color-accent-300); }
+.save-status-retry { border: 0; background: none; padding: 0; font: inherit; color: var(--color-accent); cursor: pointer; text-decoration: underline; }
+.save-spin { animation: save-spin 1s linear infinite; }
+@keyframes save-spin { to { transform: rotate(360deg); } }
+
+/* — nav menu (components/NavMenu.jsx) — */
+.nav-menu, .nav-links { display: flex; align-items: center; gap: var(--space-4); }
+.nav-toggle { display: none; }
+@media (max-width: 760px) {
+  .nav { padding: 10px 16px !important; gap: 10px; }
+  .nav-toggle { display: inline-grid; place-items: center; }
+  .nav-links { display: none; }
+  .nav-links[data-open="1"] { display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    position: absolute; top: calc(100% + 6px); right: 16px; min-width: 210px; padding: 8px; z-index: 30;
+    background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgb(0 0 0 / .35); }
+  .nav-links[data-open="1"] a { padding: 10px 12px; border-radius: var(--radius-md); font-size: 15px; }
+  .nav-links[data-open="1"] a:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+  .nav-links[data-open="1"] form { padding: 6px 4px 2px; border-top: 1px solid var(--color-divider); margin-top: 4px; }
+  .nav-links[data-open="1"] form .btn { width: 100%; }
+}
+
+/* — trip journal on narrow screens — */
+/* The journal first, a strip of destinations to move between stops, and the
+   full destination list (map, dates, travel) after it. */
+.dest-picker { display: none; }
+@media (max-width: 900px) {
+  .journal .spine { order: 2; }
+  .dest-picker { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .dest-picker::-webkit-scrollbar { display: none; }
+}
+.dest-pill { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font: inherit; font-size: 13px;
+  border-radius: 999px; border: 1px solid var(--color-divider); background: transparent; color: var(--color-neutral-300); cursor: pointer; }
+.dest-pill[aria-current="true"] { border-color: var(--color-accent); color: var(--color-text);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.dest-pill-count { font-size: 11px; color: var(--color-neutral-500); }
+.dest-pill[aria-current="true"] .dest-pill-count { color: var(--color-accent); }
+
+/* — trip hero on narrow screens — */
+@media (max-width: 600px) {
+  .hero-actions { left: 16px !important; right: 16px !important; top: 14px !important; }
+  .hero-actions .btn { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .hero-title { left: 16px !important; right: 16px !important; }
+  .page-shell, .trip-row { padding-left: 16px !important; padding-right: 16px !important; }
+}

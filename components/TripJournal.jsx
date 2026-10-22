@@ -34,6 +34,7 @@ export default function TripJournal({
   const [adding, startAdding] = useTransition();
   const carouselRef = useRef(null);
   const chipsRef = useRef(null);
+  const pickerRef = useRef(null);
   const listRef = useRef(null);
 
   // Ids can disappear underneath us (a page or destination deleted), so
@@ -71,9 +72,10 @@ export default function TripJournal({
     const ids = destinations.map((d) => d.id);
     setDir(ids.indexOf(id) < ids.indexOf(destId) ? "prev" : "next");
     setSel({ destId: id, pageId: groups[id]?.[0] || null });
-    // Stacked layout on narrow screens: the carousel sits below the list.
+    // Bring the new destination's first page into view if it's off screen —
+    // on narrow screens the list sits below the journal.
     const box = carouselRef.current?.getBoundingClientRect();
-    if (box && box.top > window.innerHeight * 0.6) carouselRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (box && (box.top > window.innerHeight * 0.6 || box.top < 0)) carouselRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   // Keep the URL pointing at what's on screen, so reloads, shared links and
@@ -98,6 +100,16 @@ export default function TripJournal({
       strip.scrollTo({ left: left - 12, behavior: "smooth" });
     }
   }, [pageId]);
+
+  // Same for the destination picker narrow screens get above the journal.
+  useEffect(() => {
+    const strip = pickerRef.current;
+    const pill = strip?.querySelector("[aria-current='true']");
+    if (!pill || !strip.offsetParent) return; // hidden on wide screens
+    if (pill.offsetLeft < strip.scrollLeft || pill.offsetLeft + pill.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+      strip.scrollTo({ left: pill.offsetLeft - 12, behavior: "smooth" });
+    }
+  }, [destId]);
 
   // The list scrolls on its own beside the pinned map; when next/prev moves
   // into another destination, bring that item into the list's view (the list
@@ -285,7 +297,7 @@ export default function TripJournal({
   });
 
   return (
-    <div className="page-shell split" style={{ display: "grid", gridTemplateColumns: "308px minmax(0, 1fr)", gap: 48, alignItems: "start", paddingBottom: BOTTOM }}>
+    <div className="page-shell split journal" style={{ display: "grid", gridTemplateColumns: "308px minmax(0, 1fr)", gap: 48, alignItems: "start", paddingBottom: BOTTOM }}>
       {/* Pinned at the top while the page scrolls, and never taller than the
           window: the map and heading stay put and only the list scrolls. It
           also has to fit above the grid's bottom padding — a sticky box that
@@ -322,7 +334,23 @@ export default function TripJournal({
         </div>
       </div>
 
-      <div ref={carouselRef} style={{ display: "flex", flexDirection: "column", gap: 18, scrollMarginTop: stickyTop + 10, minWidth: 0 }}>
+      <div ref={carouselRef} className="journal-main" style={{ display: "flex", flexDirection: "column", gap: 18, scrollMarginTop: stickyTop + 10, minWidth: 0 }}>
+        {/* Narrow screens only: the journal comes first there, with the full
+            destination list (and its editors) after it, so this is how you
+            move between stops. */}
+        {destinations.length > 1 && (
+          <div ref={pickerRef} className="dest-picker" aria-label="Destinations">
+            {destinations.map((d) => {
+              const count = groups[d.id]?.length || 0;
+              return (
+                <button key={d.id} type="button" className="dest-pill" aria-current={d.id === destId ? "true" : undefined}
+                  onClick={() => pickDestination(d.id)}>
+                  <span>{d.name}</span><span className="dest-pill-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         {dest ? (
           <>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
