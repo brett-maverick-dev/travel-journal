@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AuthForm from "@/components/AuthForm";
+import PasswordInput from "@/components/PasswordInput";
 import { signIn } from "@/app/actions";
 
 export default function SignIn() {
@@ -18,7 +19,7 @@ export default function SignIn() {
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
-            <input className="input" id="password" name="password" type="password" required />
+            <PasswordInput id="password" name="password" required autoComplete="current-password" />
           </div>
         </AuthForm>
         <div className="text-muted" style={{ fontSize: 13, marginTop: 14, display: "flex", justifyContent: "space-between", gap: 12 }}>

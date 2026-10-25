@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import PasswordInput from "./PasswordInput";
 
 // A new password and its confirmation. While they differ the confirm box is
 // marked invalid, so the browser stops the form from submitting — and nothing
@@ -18,12 +19,12 @@ export default function PasswordFields({ label = "Password" }) {
     <>
       <div className="field">
         <label htmlFor="password">{label}</label>
-        <input ref={password} className="input" id="password" name="password" type="password"
+        <PasswordInput ref={password} id="password" name="password"
           placeholder="At least 10 characters" required minLength={10} autoComplete="new-password" onInput={check} />
       </div>
       <div className="field">
         <label htmlFor="confirmPassword">Confirm {label.toLowerCase()}</label>
-        <input ref={confirm} className="input" id="confirmPassword" name="confirmPassword" type="password"
+        <PasswordInput ref={confirm} id="confirmPassword" name="confirmPassword"
           placeholder="Type it again" required minLength={10} autoComplete="new-password" onInput={check} />
       </div>
     </>
