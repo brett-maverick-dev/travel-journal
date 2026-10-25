@@ -23,6 +23,13 @@ model User {
   resetCode         String?
   resetExpires      DateTime?
   resetAttempts     Int         @default(0) // wrong guesses against the current resetCode
+  pendingEmail      String? // a new address asked for on the profile page, not yet proven
+  emailChangeCode   String?
+  emailChangeExpires DateTime?
+  emailChangeAttempts Int       @default(0) // wrong guesses against the current emailChangeCode
+  sessionVersion    Int         @default(0) // bumped to sign out every session issued before it
+  failedPasswordAttempts Int    @default(0) // wrong passwords in a row, signing in or on the profile
+  passwordLockedUntil DateTime? // no password is accepted before this — a reset lifts it
   name              String      @default("")
   avatarUrl         String?     @db.VarChar(1024)
   homeCity          String      @default("")

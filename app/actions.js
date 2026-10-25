@@ -6,8 +6,12 @@ import { randomInt, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { createSession, destroySession, currentUser, requireUser, isAdminUser } from "@/lib/session";
-import { sendVerificationCode, sendPasswordReset, sendBuddyRequestEmail } from "@/lib/mail";
+import {
+  sendVerificationCode, sendPasswordReset, sendBuddyRequestEmail,
+  sendEmailChangeCode, sendEmailChangeRequested, sendEmailChanged
+} from "@/lib/mail";
 import { signBuddyToken, verifyBuddyToken } from "@/lib/buddy-token";
+import { signEmailUndoToken, verifyEmailUndoToken } from "@/lib/email-undo-token";
 import { appUrl } from "@/lib/app-url";
 import { can, tripRole, canManageRole, normalizeRole, SHAREABLE_ROLES } from "@/lib/permissions";
 import { saveUpload, mediaUrl, UPLOAD_DIR } from "@/lib/storage";
@@ -25,6 +29,35 @@ const code6 = () => String(randomInt(100000, 1000000));
 // new one has to be requested — six digits is only 900k possibilities, so
 // without this a script could walk the whole space inside the 10-minute window.
 const MAX_CODE_ATTEMPTS = 5;
+
+// Wrong passwords allowed in a row — signing in, or confirming it on the
+// profile — before the account takes none for a while. Resetting the password
+// lifts the lock, so its owner can't be shut out by someone else's guessing.
+const MAX_PASSWORD_ATTEMPTS = 5;
+const PASSWORD_LOCK_MS = 15 * 60 * 1000;
+
+function passwordLockMessage(until) {
+  const minutes = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60000));
+  return "Too many wrong passwords. Try again in " + minutes + (minutes === 1 ? " minute" : " minutes") +
+    ", or reset your password.";
+}
+
+// null when the password is right; otherwise { locked: message } if the
+// account isn't taking passwords right now, or {} for a plain wrong one.
+async function checkPassword(user, password) {
+  if (user.passwordLockedUntil > new Date()) return { locked: passwordLockMessage(user.passwordLockedUntil) };
+  if (await bcrypt.compare(password, user.passwordHash)) {
+    if (user.failedPasswordAttempts) await db.user.update({ where: { id: user.id }, data: { failedPasswordAttempts: 0 } });
+    return null;
+  }
+  const { failedPasswordAttempts } = await db.user.update({
+    where: { id: user.id }, data: { failedPasswordAttempts: { increment: 1 } }, select: { failedPasswordAttempts: true }
+  });
+  if (failedPasswordAttempts < MAX_PASSWORD_ATTEMPTS) return {};
+  const until = new Date(Date.now() + PASSWORD_LOCK_MS);
+  await db.user.update({ where: { id: user.id }, data: { failedPasswordAttempts: 0, passwordLockedUntil: until } });
+  return { locked: passwordLockMessage(until) };
+}
 
 // Parses a yyyy-mm-dd (or any Date-parsable) value; null for blank/garbage so
 // callers can refuse it instead of handing Prisma an Invalid Date.
@@ -165,9 +198,9 @@ export async function signIn(_prev, form) {
   const email = String(form.get("email") || "").trim().toLowerCase();
   const password = String(form.get("password") || "");
   const user = await db.user.findUnique({ where: { email } });
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-    return { error: "Email or password is wrong." };
-  }
+  if (!user) return { error: "Email or password is wrong." };
+  const wrong = await checkPassword(user, password);
+  if (wrong) return { error: wrong.locked || "Email or password is wrong." };
   if (!user.verified) redirect("/verify?email=" + encodeURIComponent(email));
   await createSession(user.id);
   redirect("/trips");
@@ -214,10 +247,166 @@ export async function resetPassword(_prev, form) {
     return { error: "That code does not match." };
   }
 
+  // Bumping sessionVersion signs out every other device — if someone else had
+  // got in, the reset locks them out. A pending email change is dropped too,
+  // since it may have been theirs.
   const passwordHash = await bcrypt.hash(password, 10);
-  await db.user.update({ where: { id: user.id }, data: { passwordHash, resetCode: null, resetExpires: null, resetAttempts: 0 } });
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash, resetCode: null, resetExpires: null, resetAttempts: 0, sessionVersion: { increment: 1 },
+      failedPasswordAttempts: 0, passwordLockedUntil: null, ...NO_EMAIL_CHANGE
+    }
+  });
   await createSession(user.id);
   redirect("/trips");
+}
+
+/* ── email change ─────────────────────────────────────────────────── */
+
+// Changing the address takes the account password (a signed-in session alone
+// isn't enough) and a code sent to the new inbox. The old inbox hears about
+// the request and the change, and the change signs out every other device.
+// The notice of the change carries a link that undoes it (undoEmailChange).
+
+const EMAIL_CODE_TTL = 10 * 60 * 1000;
+const EMAIL_CODE_RESEND_WAIT = 60 * 1000;
+
+const NO_EMAIL_CHANGE = { pendingEmail: null, emailChangeCode: null, emailChangeExpires: null, emailChangeAttempts: 0 };
+
+// "n•••@gmail.com" — enough for the owner to recognise the address in a
+// notice sent to the old inbox without spelling it out.
+function maskEmail(email) {
+  const [local, domain] = email.split("@");
+  return local[0] + "•••@" + domain;
+}
+
+// Sends a fresh code to `pendingEmail`, at most once a minute so the form
+// can't be used to flood someone's inbox. Returns an error object, or null.
+async function issueEmailChangeCode(user, pendingEmail) {
+  const sentAt = user.emailChangeExpires ? user.emailChangeExpires.getTime() - EMAIL_CODE_TTL : 0;
+  if (Date.now() - sentAt < EMAIL_CODE_RESEND_WAIT) {
+    return { error: "We just sent a code — wait a minute before asking for another." };
+  }
+  const emailChangeCode = code6();
+  await db.user.update({
+    where: { id: user.id },
+    data: { pendingEmail, emailChangeCode, emailChangeExpires: new Date(Date.now() + EMAIL_CODE_TTL), emailChangeAttempts: 0 }
+  });
+  await sendEmailChangeCode(pendingEmail, emailChangeCode);
+  return null;
+}
+
+export async function requestEmailChange(_prev, form) {
+  const user = await requireUser();
+  const email = String(form.get("email") || "").trim().toLowerCase();
+  const password = String(form.get("password") || "");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 191) return { error: "Enter a valid email address." };
+  if (email === user.email) return { error: "That's already your email address." };
+  const wrong = await checkPassword(user, password);
+  if (wrong) return { error: wrong.locked || "That password isn't right." };
+
+  // Sign-up already says when an address is taken, so saying it here gives nothing away.
+  const owner = await db.user.findUnique({ where: { email } });
+  if (owner?.verified) return { error: "That email already belongs to another account." };
+
+  const res = await issueEmailChangeCode(user, email);
+  if (res) return res;
+  await sendEmailChangeRequested(user.email, maskEmail(email), (await appUrl()) + "/forgot-password");
+  redirect("/profile/email");
+}
+
+export async function resendEmailChange() {
+  const user = await requireUser();
+  if (!user.pendingEmail) redirect("/profile/email");
+  const res = await issueEmailChangeCode(user, user.pendingEmail);
+  redirect("/profile/email?" + (res ? "wait=1" : "sent=1"));
+}
+
+export async function cancelEmailChange() {
+  const user = await requireUser();
+  await db.user.update({ where: { id: user.id }, data: NO_EMAIL_CHANGE });
+  redirect("/profile");
+}
+
+export async function confirmEmailChange(_prev, form) {
+  const user = await requireUser();
+  const code = String(form.get("code") || "").trim();
+  if (!user.pendingEmail || !user.emailChangeCode) return { error: "That code does not match. Send a new one below." };
+  if (user.emailChangeExpires < new Date()) return { error: "That code has expired. Send a new one below." };
+  if (user.emailChangeCode !== code) {
+    const attempts = user.emailChangeAttempts + 1;
+    if (attempts >= MAX_CODE_ATTEMPTS) {
+      // Keep emailChangeExpires so the resend wait still applies.
+      await db.user.update({ where: { id: user.id }, data: { emailChangeCode: null, emailChangeAttempts: 0 } });
+      return { error: "Too many wrong tries — that code no longer works. Send a new one below." };
+    }
+    await db.user.update({ where: { id: user.id }, data: { emailChangeAttempts: attempts } });
+    return { error: "That code does not match." };
+  }
+
+  const oldEmail = user.email;
+  const email = user.pendingEmail;
+  try {
+    await db.$transaction(async (tx) => {
+      const owner = await tx.user.findUnique({ where: { email } });
+      if (owner?.verified) throw new Error("EMAIL_TAKEN");
+      // An unverified sign-up holding the address never proved it owns the
+      // inbox; this user just did. Unverified accounts can't have made anything.
+      if (owner) await tx.user.delete({ where: { id: owner.id } });
+      await tx.user.update({
+        where: { id: user.id },
+        data: { email, ...NO_EMAIL_CHANGE, sessionVersion: { increment: 1 } }
+      });
+    });
+  } catch (err) {
+    if (err.message !== "EMAIL_TAKEN" && err.code !== "P2002") throw err;
+    await db.user.update({ where: { id: user.id }, data: NO_EMAIL_CHANGE });
+    return { error: "That email now belongs to another account, so it can't be moved to yours." };
+  }
+
+  const undoToken = await signEmailUndoToken(user.id, oldEmail);
+  await sendEmailChanged(oldEmail, maskEmail(email), (await appUrl()) + "/restore-email?t=" + encodeURIComponent(undoToken));
+  await createSession(user.id); // keeps this device signed in under the new sessionVersion
+  redirect("/profile?email=changed");
+}
+
+// From the undo link sent to the old address (see app/restore-email). Moves
+// the account back there and treats it as taken over: everyone is signed out,
+// the password — which whoever changed the email knows — stops working, and a
+// reset code goes to the restored address so the owner can set a new one.
+export async function undoEmailChange(form) {
+  const token = String(form.get("t") || "");
+  const back = "/restore-email?t=" + encodeURIComponent(token);
+  const claim = await verifyEmailUndoToken(token);
+  if (!claim) redirect(back);
+  const user = await db.user.findUnique({ where: { id: claim.userId } });
+  if (!user || user.email === claim.email) redirect(back);
+
+  const resetCode = code6();
+  const unusable = await bcrypt.hash(randomUUID() + randomUUID(), 10);
+  try {
+    await db.$transaction(async (tx) => {
+      const owner = await tx.user.findUnique({ where: { email: claim.email } });
+      if (owner?.verified) throw new Error("EMAIL_TAKEN");
+      if (owner) await tx.user.delete({ where: { id: owner.id } }); // an unverified sign-up, as in confirmEmailChange
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          email: claim.email, ...NO_EMAIL_CHANGE, sessionVersion: { increment: 1 },
+          passwordHash: unusable, failedPasswordAttempts: 0, passwordLockedUntil: null,
+          resetCode, resetExpires: new Date(Date.now() + 10 * 60 * 1000), resetAttempts: 0
+        }
+      });
+    });
+  } catch (err) {
+    if (err.message !== "EMAIL_TAKEN" && err.code !== "P2002") throw err;
+    redirect(back + "&taken=1");
+  }
+
+  await sendPasswordReset(claim.email, resetCode);
+  await destroySession();
+  redirect("/reset-password?restored=1&email=" + encodeURIComponent(claim.email));
 }
 
 /* ── profile ──────────────────────────────────────────────────────── */

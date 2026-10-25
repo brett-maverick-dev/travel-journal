@@ -8,11 +8,12 @@ import { currentUser } from "@/lib/session";
 import { updateProfile } from "@/app/actions";
 import { fmt, SOCIALS } from "@/lib/format";
 
-export default async function Profile() {
+export default async function Profile({ searchParams }) {
   const user = await currentUser();
   if (!user) redirect("/signin");
   if (!user.verified) redirect("/verify?email=" + encodeURIComponent(user.email));
 
+  const { email: emailNotice } = await searchParams;
   const initials = (user.name || user.email || "me").slice(0, 2).toUpperCase();
 
   return (
@@ -78,10 +79,19 @@ export default async function Profile() {
 
           <div className="field">
             <label>Email</label>
-            <input className="input" value={user.email} disabled style={{ opacity: 0.6 }} />
-            <p className="text-muted" style={{ fontSize: 11, margin: "4px 0 0" }}>
-              Contact support to change the email on your account.
-            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input className="input" value={user.email} disabled aria-label="Email" style={{ opacity: 0.6, flex: 1, minWidth: 0 }} />
+              <Link className="btn btn-secondary" href="/profile/email" style={{ flex: "none" }}>Change</Link>
+            </div>
+            {user.pendingEmail ? (
+              <p className="text-muted" style={{ fontSize: 11, margin: "4px 0 0" }}>
+                Waiting for the code sent to {user.pendingEmail}. <Link href="/profile/email">Enter it</Link>
+              </p>
+            ) : emailNotice === "changed" ? (
+              <p style={{ fontSize: 11, margin: "4px 0 0", color: "var(--color-accent)" }}>
+                Email changed. Any other devices signed in to your account have been signed out.
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
